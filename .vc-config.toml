@@ -27,17 +27,19 @@ dir = "../../vc-x1"
 # yes = true
 
 [validate]
-#full = ["cargo fmt", "cargo clippy --all-targets -- -D warnings", "cargo test", "cargo install --path . --locked"]
 full = [
+  "cargo fmt",
+  "cargo clippy --all-targets -- -D warnings",
+  "cargo test",
+  "cargo install --path . --locked",
   "vc-x1 validate-anchors",
   "vc-x1 validate-desc @-",
   "vc-x1 validate-desc @- -R .agent-session",
 ]
-#fast = ["cargo fmt", "cargo clippy --all-targets -- -D warnings", "cargo test", "cargo install --path . --locked"]
 fast = [
-    "vc-x1 validate-anchors",
-    "vc-x1 validate-desc @-",
-    "vc-x1 validate-desc @- -R .agent-session",
+  "cargo clippy --all-targets -- -D warnings",
+  "cargo test",
+  "vc-x1 validate-anchors",
 ]
 
 [test]

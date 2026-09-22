@@ -1,0 +1,9 @@
+# Notes
+
+Design notes and records for the project, one file per topic. Conventions for the notes files,
+`TODO.md` included, are in [agent-data/notes.md](../agent-data/notes.md), the one source of truth,
+and this file points back at it.
+
+- [actor-model-1.md](actor-model-1.md): the captured discussion that set the direction. TUI versus
+  GUI under the final architecture's constraints, an actor runtime over the zc-ring rings and
+  pools, UI elements as actors, and the message-level consequences.
