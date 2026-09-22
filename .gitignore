@@ -2,3 +2,19 @@
 /.agent-session
 /.git
 /.jj
+/.claude
+/tmp
+
+# Names the agent sandbox bind-mounts over /dev/null at the repo root while a command runs,
+# so status run by the agent does not list them.
+/.bash_profile
+/.bashrc
+/.gitconfig
+/.gitmodules
+/.idea
+/.mcp.json
+/.profile
+/.ripgreprc
+/.vscode
+/.zprofile
+/.zshrc

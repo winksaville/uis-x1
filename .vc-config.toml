@@ -1,0 +1,44 @@
+# vc-x1 settable config keys (from vc-x1 0.84.12)
+# Keys below are shown at their built-in default (commented
+# unless required); run `vc-x1 config --validate` to check a
+# config file's keys against this schema.
+
+# -- .vc-config.toml --
+
+[repos]
+work = "."
+agent = ".agent-session"
+
+[remote]
+agent-repo = "uis-x1.agent-session"
+
+[family]
+member = "uis-x1"
+# template = "../../vc-x1-template/work"
+messages = "../../vc-x1-messages"
+
+[agent-files.diff]
+dir = "../../vc-x1"
+
+[agent-files.copy]
+dir = "../../vc-x1"
+
+[squash-push]
+# yes = true
+
+[validate]
+#full = ["cargo fmt", "cargo clippy --all-targets -- -D warnings", "cargo test", "cargo install --path . --locked"]
+full = [
+  "vc-x1 validate-anchors",
+  "vc-x1 validate-desc @-",
+  "vc-x1 validate-desc @- -R .agent-session",
+]
+#fast = ["cargo fmt", "cargo clippy --all-targets -- -D warnings", "cargo test", "cargo install --path . --locked"]
+fast = [
+    "vc-x1 validate-anchors",
+    "vc-x1 validate-desc @-",
+    "vc-x1 validate-desc @- -R .agent-session",
+]
+
+[test]
+# fixtures = "../../vc-x1-fixtures"
