@@ -1,10 +1,11 @@
 [package]
 name = "uis-x1"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "UI experiments toward an actor-model UI with TUI and GUI backends"
 
 [dependencies]
+rustix = { version = "1", features = ["termios"] }
 
 [lints.clippy]
 unwrap_used = "warn"
