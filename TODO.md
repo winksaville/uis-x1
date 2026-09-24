@@ -16,7 +16,106 @@ A cycle's record has one home at a time, and while the cycle runs this is it. Th
 the specimen in [cycle-model.md](agent-data/cycle-model.md), and the rules are in [The In Progress
 block](agent-data/notes.md#the-in-progress-block).
 
-_No cycle currently in progress._
+### feat: workspace-gui-softbuffer
+
+#### Problem
+
+The project is one package holding the terminal program, and the progression needs a window twin
+of it, with more twins of each kind expected. A window stack pulls in some 86 crates on Linux,
+which a single package would make every terminal build compile.
+
+#### Solution
+
+Make the repo a Cargo workspace whose root manifest is only the workspace, move the terminal
+program unchanged into a `tui-rustix` member, and add a `gui-softbuffer` member that shows the text
+in a window until Return. The window twin draws with winit and softbuffer, and a bitmap font
+renders the text into the pixel buffer.
+
+- Each member is named for its stack, and its package and binary carry the project prefix,
+  `uis-x1-tui-rustix` and `uis-x1-gui-softbuffer`.
+- The version-of-record moves to the workspace manifest, and both members inherit it.
+- The text scales by the window's scale factor in whole steps.
+- Validation installs each binary, and the stale `uis-x1` binary is uninstalled.
+
+#### Acceptance check
+
+`cargo test` at the root runs both members' tests and passes. The terminal twin's tests pass
+unchanged apart from names, and a window-twin test renders the frame into a pixel buffer and finds
+the text's pixels in it. The terminal twin passes the pseudo-terminal check from the last cycle
+again. In a desktop session, `uis-x1-gui-softbuffer` opens a window showing the text, and Return or
+closing the window exits it.
+
+#### Deliberation
+
+- Workspace-only root: the root manifest declares the workspace and no package, so every cargo
+  command at the root covers every member.
+  - Two binaries in one package would share the window stack's crates unless a cargo feature gated
+    them, and the gating is friction on every command.
+  - Keeping the terminal program as the root package, with the window twin as a member, moves no
+    files. But cargo commands at the root reach only the root package, and the later core crate
+    would sit lopsided beside it.
+- Members named for their stack: more twins of each kind are expected, `tui-ratatui` for one, so a
+  member's name says what differs.
+- Project prefix on packages and binaries: `cargo install` names a binary after its package in the
+  shared cargo bin directory, where a bare stack name could collide with another project's binary.
+- Softbuffer for the window twin: winit is common to nearly every Rust GUI stack, egui and iced
+  included, so the software pixel path is what sets this twin apart.
+  - The crate is mature, its main branch is active, and its latest release is from 2025-12-13.
+  - It is the thinnest layer to the OS, and a pixel presenter over it later runs unchanged over a
+    bare-metal framebuffer, per [actor-model-1.md](notes/actor-model-1.md).
+- The stable winit line: the next line is still in beta with a changed API, so the twin starts on
+  the stable one.
+- Fonts from embedded-graphics: its mono fonts are bitmap fonts with a draw-target trait, the
+  pairing the actor notes plan for one pixel presenter over a window and a framebuffer, and it
+  adds six small crates.
+  - The font8x8 crate is lighter, one crate with one 8 by 8 font, and has no draw-target trait.
+- Whole-step scaling: a 10 by 20 bitmap font is tiny on a high-density display, so the text scales
+  by the window's scale factor rounded to a whole number, which keeps each font pixel a sharp
+  square.
+- Return or window close exits: the window twin mirrors the terminal twin's Return, and a window
+  can also be closed from its title bar, so both end it. Escape stays unbound, as in the terminal
+  twin.
+- The text copied, not shared: each twin keeps its own copy of the text, since a shared crate for
+  one constant is premature and the core crate arrives with the cell grid.
+- The move as its own rung: the terminal program moves unchanged in a rung of its own, so the move
+  is reviewed as a move before any window code lands on it.
+- A pixel-buffer test for the window twin: the sandbox has no display, so the test renders into a
+  buffer and checks pixels, and only the window itself is checked by hand.
+- No restart between cycles: the user opened this cycle in the session that ran the last one.
+- The last cycle lands first: main advances to the quit-on-Return commit and its bookmark is
+  deleted before this opening's push, so that commit stays out of this ladder.
+
+#### Ladder
+
+- [feat: workspace-gui-softbuffer opening][1] (done)
+- [refactor: move the tui into the workspace][2]
+- [feat: add the gui-softbuffer twin][3]
+- [feat: workspace-gui-softbuffer closing][4]
+
+##### feat: workspace-gui-softbuffer opening
+
+The cycle's setup commit: create and publish the bookmark, empty `## Closed`, move the Todo entry
+into this block, and bump the version-of-record.
+
+The plan settled at the opening: a workspace-only root, members named for their stack with
+prefixed packages and binaries, softbuffer on the stable winit line, embedded-graphics fonts scaled
+in whole steps, and exits on Return or window close.
+
+##### refactor: move the tui into the workspace
+
+The terminal program is the root package, so a second program cannot sit beside it without sharing
+its dependencies. The root becomes a workspace-only manifest, and the program moves unchanged into
+`tui-rustix/` under its prefixed name.
+
+##### feat: add the gui-softbuffer twin
+
+The progression has no window program. A `gui-softbuffer` member opens a window with winit, draws
+the text with a bitmap font into a softbuffer pixel buffer, and exits on Return or when the window
+closes.
+
+##### feat: workspace-gui-softbuffer closing
+
+Closing out the cycle.
 
 ## Waiting
 
@@ -27,11 +126,6 @@ _None._
 Entries are in priority order, the first highest, and reprioritizing is moving an entry. Each is a
 `###` heading, so a citation is a link to its anchor. Use the [Prose
 form](agent-data/prose.md#prose-form).
-
-### The GUI twin
-
-The same program as a window: winit, softbuffer, and a bitmap font blitted into a grid-shaped
-buffer, so the later cell-grid presenter is a refactor rather than a rewrite.
 
 ### Record the actor access rule
 
@@ -62,84 +156,11 @@ _None._
 
 ## Closed
 
-### feat: quit on return
-
-#### Problem
-
-The display ends on a timer, so the user cannot choose when to leave it. A Ctrl-C during the
-display kills the process before the guard's `Drop` runs, so the alternate screen stays up.
-
-#### Solution
-
-Stdin's terminal goes into raw mode through the rustix crate, and the display stays until CR or LF
-is read from stdin, or until the input ends. Raw mode turns Ctrl-C into a byte the wait ignores.
-
-- The raw-mode guard applies only when stdin is a terminal and restores the saved settings on drop,
-  and the binary enters it before the alternate screen.
-- The wait is a library function over a buffered reader, unit tested with byte slices.
-- The integration test pipes stdin, checks that the binary waits, then sends a newline and checks
-  the exit and the text.
-- The findings about terminal input went into [terminal-host.md](notes/terminal-host.md).
-- The workspace gained a README and the MIT and Apache-2.0 license files.
-
-#### Acceptance check
-
-`cargo test` passes with a test that runs the binary with stdin piped, finds it still running after
-a pause, writes a newline, and sees a clean exit with the text on stdout. In a real terminal, a
-Ctrl-C during the display is ignored, Return ends it, and the shell comes back with its echo and
-line editing working.
-
-Result: pass. `cargo test` passes, and the terminal half ran on a pseudo-terminal. Two Ctrl-Cs half
-a second apart left the program running, Return ended it with exit status 0, no `^C` was echoed,
-and the terminal settings read before and after were identical. A control run in the same harness
-showed a Ctrl-C killing a plain `sleep`, so the harness delivers real signals.
-
-#### Ladder
-
-- feat: quit on return (done)
-
-#### Deliberation
-
-- Raw mode through rustix: the crate's safe calls read the terminal settings, make them raw, write
-  them back, and check whether stdin is a terminal.
-  - It pulls in three crates on Linux and makes the system calls itself there, without libc.
-    Since crossterm is built on it, a later move to crossterm starts from the same base.
-  - Calling libc directly was the first plan, and it makes every call `unsafe`.
-  - The termion crate applies raw mode to the output handle, and the test pipes stdout, so
-    entering raw mode fails there.
-  - The crossterm crate pulls in 13 to 27 crates for raw mode plus output commands, and the plan
-    builds the output layer itself as the cell-grid presenter.
-- Windows later: Windows has no POSIX terminal settings, so the terminal module of rustix is Unix
-  only, and macOS works unchanged.
-  - A Windows console module comes behind a platform switch when a Windows terminal build is a
-    goal. It clears line input, echo, and processed input, and turns on virtual terminal
-    processing so the escape sequences are honored.
-  - The one-crate alternative at that point is crossterm.
-- The standard raw settings: the `make_raw` call gives the settings of `cfmakeraw`, which clear
-  more than line input, echo, and signals.
-  - Return arrives as CR, since the CR to LF translation is off.
-  - Output processing is off, so a written newline no longer returns the cursor. The program
-    writes no newline, and the cell-grid presenter will write explicit carriage returns.
-  - Ctrl-Z and `Ctrl-\` arrive as bytes like Ctrl-C, and flow control by Ctrl-S and Ctrl-Q is off.
-- CR or LF ends the display: a terminal in raw mode sends CR for Return, and a pipe sends LF.
-- Raw mode only on a terminal: a pipe has no terminal settings, and the test feeds stdin through
-  one.
-- End of input ends the display: a closed stdin can never deliver a Return, so waiting past its end
-  would hang the program.
-- Raw mode before the alternate screen: entering raw mode first leaves no moment when the
-  alternate screen is up and Ctrl-C still kills the process. The guards drop in reverse, so the
-  screen is restored before the input settings.
-- The wait in the library: it is a function over a buffered reader, so a unit test feeds it
-  bytes, Ctrl-C's included, with no terminal.
-- Stdin held open until the exit: the test keeps its end of the pipe open while it waits, since
-  closing it would end the display through end of input and hide a broken Return.
-- A buffered reader for the wait: clippy flags reading a byte at a time from an unbuffered reader,
-  and stdin's lock and a byte slice are both buffered, so the wait takes a buffered reader.
-- A pseudo-terminal for the terminal half: `script` runs the binary on one, so the Ctrl-C and
-  Return bytes pass through a real terminal driver, which the sandbox otherwise lacks.
-- README and licenses in this commit: they arrived during the cycle, and the user chose this
-  commit over a Todo entry of their own, as [Unplanned work](AGENTS.md#unplanned-work) allows.
-  - The licenses match the sibling projects' dual MIT and Apache-2.0 pair, with this project's
-    year.
+_None._
 
 # References
+
+[1]: #feat-workspace-gui-softbuffer-opening
+[2]: #refactor-move-the-tui-into-the-workspace
+[3]: #feat-add-the-gui-softbuffer-twin
+[4]: #feat-workspace-gui-softbuffer-closing
