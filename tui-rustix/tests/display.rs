@@ -9,7 +9,7 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use uis_x1::TEXT;
+use tui_rustix::TEXT;
 
 /// How long the binary runs before the test checks that it is still waiting.
 const PAUSE: Duration = Duration::from_millis(200);
@@ -26,7 +26,7 @@ const DEADLINE: Duration = Duration::from_secs(5);
 ///   input and hide a broken Return.
 #[test]
 fn shows_hello_world_until_return() {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_uis-x1"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tui-rustix"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()

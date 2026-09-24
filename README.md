@@ -1,10 +1,10 @@
 # Experiment with UIs
 
-A Rust program that is a TUI based on an alternate screen.
+A Cargo workspace of Rust programs toward an actor-model UI, each member named for its stack:
 
-After installing, execute it with `uis-x1` from a terminal.
-It displays "Hello, World" until Return/Enter is pressed, then
-exits back to the terminal's original screen.
+- `tui-rustix`: a TUI on the alternate screen over rustix, installed as `tui-rustix`. It
+  displays "Hello, World" until Return/Enter is pressed, then exits back to the terminal's
+  original screen.
 
 ## Build
 
@@ -21,13 +21,13 @@ cargo test
 ## Run
 
 ```
-cargo run
+cargo run -p tui-rustix
 ```
 
 ## Install
 
 ```
-cargo install --path . --locked
+cargo install --path tui-rustix --locked
 ```
 
 ## License

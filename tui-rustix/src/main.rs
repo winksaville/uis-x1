@@ -5,7 +5,7 @@
 
 use std::io::{self, Write};
 
-use uis_x1::{AltScreen, RawMode, TEXT, wait_for_return};
+use tui_rustix::{AltScreen, RawMode, TEXT, wait_for_return};
 
 /// Show the text on the alternate screen until Return.
 ///

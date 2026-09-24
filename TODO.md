@@ -31,8 +31,8 @@ program unchanged into a `tui-rustix` member, and add a `gui-softbuffer` member 
 in a window until Return. The window twin draws with winit and softbuffer, and a bitmap font
 renders the text into the pixel buffer.
 
-- Each member is named for its stack, and its package and binary carry the project prefix,
-  `uis-x1-tui-rustix` and `uis-x1-gui-softbuffer`.
+- Each member is named for its stack, and its package and binary carry that name alone,
+  `tui-rustix` and `gui-softbuffer`.
 - The version-of-record moves to the workspace manifest, and both members inherit it.
 - The text scales by the window's scale factor in whole steps.
 - Validation installs each binary, and the stale `uis-x1` binary is uninstalled.
@@ -42,8 +42,8 @@ renders the text into the pixel buffer.
 `cargo test` at the root runs both members' tests and passes. The terminal twin's tests pass
 unchanged apart from names, and a window-twin test renders the frame into a pixel buffer and finds
 the text's pixels in it. The terminal twin passes the pseudo-terminal check from the last cycle
-again. In a desktop session, `uis-x1-gui-softbuffer` opens a window showing the text, and Return or
-closing the window exits it.
+again. In a desktop session, `gui-softbuffer` opens a window showing the text, and Return or closing
+the window exits it.
 
 #### Deliberation
 
@@ -56,8 +56,13 @@ closing the window exits it.
     would sit lopsided beside it.
 - Members named for their stack: more twins of each kind are expected, `tui-ratatui` for one, so a
   member's name says what differs.
-- Project prefix on packages and binaries: `cargo install` names a binary after its package in the
-  shared cargo bin directory, where a bare stack name could collide with another project's binary.
+- Bare stack names on packages and binaries: a member's package and binary are its directory's
+  name, which is simpler to type and to read, chosen by the user at the move's review.
+  - The opening planned a project prefix, `uis-x1-tui-rustix`, since `cargo install` puts every
+    binary in the shared cargo bin directory, where a bare stack name could collide with another
+    project's binary. That collision is the cost accepted.
+  - A short package with a prefixed binary, through a `[[bin]]` name, kept the short cargo commands
+    and the collision guard, and was declined for the simpler manifest.
 - Softbuffer for the window twin: winit is common to nearly every Rust GUI stack, egui and iced
   included, so the software pixel path is what sets this twin apart.
   - The crate is mature, its main branch is active, and its latest release is from 2025-12-13.
@@ -88,7 +93,7 @@ closing the window exits it.
 #### Ladder
 
 - [feat: workspace-gui-softbuffer opening][1] (done)
-- [refactor: move the tui into the workspace][2]
+- [refactor: move the tui into the workspace][2] (done)
 - [feat: add the gui-softbuffer twin][3]
 - [feat: workspace-gui-softbuffer closing][4]
 
@@ -105,7 +110,17 @@ in whole steps, and exits on Return or window close.
 
 The terminal program is the root package, so a second program cannot sit beside it without sharing
 its dependencies. The root becomes a workspace-only manifest, and the program moves unchanged into
-`tui-rustix/` under its prefixed name.
+`tui-rustix/` under that name.
+
+- The root declares the workspace and the shared `version` and `edition`, and the member inherits
+  both, so the version-of-record has one home for every member.
+- The package, and with it the binary and the library crate, is `tui-rustix`, the bare stack name
+  the review chose over the planned prefix, and the sources change only where they name the crate
+  or the binary.
+- The member keeps its own clippy lints for now. Hoisting them to the workspace waits for a second
+  member to share them.
+- Validation installs from `tui-rustix/`, since `cargo install --path .` needs a package at the
+  root, and the stale `uis-x1` binary is uninstalled.
 
 ##### feat: add the gui-softbuffer twin
 
@@ -126,6 +141,31 @@ _None._
 Entries are in priority order, the first highest, and reprioritizing is moving an entry. Each is a
 `###` heading, so a citation is a link to its anchor. Use the [Prose
 form](agent-data/prose.md#prose-form).
+
+### Commit the config file form entry
+
+The agent-files name the workspace config `.vc-config.md`, and this work-repo's is
+`.vc-config.toml`. The custom.md entry that reads one as the other was set aside during the
+workspace-gui-softbuffer cycle, since an agent-file change is its own cycle.
+
+- Add the entry below to custom.md's `## Project conventions and overrides`, first in its list,
+  as its own cycle. `tmp/custom-md.patch` holds the same text as a patch while `tmp/` survives.
+- Retire it when [Propose the two config file forms to the
+  set](#propose-the-two-config-file-forms-to-the-set) lands in the payload and is adopted.
+
+```markdown
+- Config file form: the workspace config is either `.vc-config.toml`, plain TOML, or
+  `.vc-config.md`, whose fences tagged `toml` hold it, and this work-repo uses the first.
+  Wherever the agent-files say `.vc-config.md`, read it as whichever form the repo has.
+  Supersedes the file name in [The dual-repo model](AGENTS.md#the-dual-repo-model) and
+  [.vc-config.md](agent-data/jj.md#vc-configmd).
+```
+
+### Propose the two config file forms to the set
+
+The set's [.vc-config.md](agent-data/jj.md#vc-configmd) section names one file form, and vc-x1
+reads two, a plain `.vc-config.toml` and a `.vc-config.md` whose `toml` fences hold the config.
+Propose that the section name both, so no adopter needs a custom.md entry for it.
 
 ### Record the actor access rule
 

@@ -1,12 +1,7 @@
-[package]
-name = "uis-x1"
-version = "0.1.2-0"
+[workspace]
+resolver = "3"
+members = ["tui-rustix"]
+
+[workspace.package]
+version = "0.1.2-1"
 edition = "2024"
-description = "UI experiments toward an actor-model UI with TUI and GUI backends"
-
-[dependencies]
-rustix = { version = "1", features = ["termios"] }
-
-[lints.clippy]
-unwrap_used = "warn"
-expect_used = "warn"

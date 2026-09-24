@@ -1,0 +1,12 @@
+[package]
+name = "tui-rustix"
+version.workspace = true
+edition.workspace = true
+description = "UI experiments toward an actor-model UI with TUI and GUI backends"
+
+[dependencies]
+rustix = { version = "1", features = ["termios"] }
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"

@@ -44,8 +44,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "uis-x1"
-version = "0.1.2-0"
+name = "tui-rustix"
+version = "0.1.2-1"
 dependencies = [
  "rustix",
 ]
