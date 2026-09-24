@@ -36,7 +36,8 @@ Return: `gui-winit-softbuffer`, where winit owns the loop and softbuffer present
 - Each member is named for every layer of its stack that differs, and its package and binary carry
   that name alone.
 - The version-of-record moves to the workspace manifest, and every member inherits it.
-- The text scales by the window's scale factor in whole steps.
+- The winit twin scales the text by the window's scale factor in whole steps, and the minifb twin,
+  which has no factor to read, draws at scale 1.
 - Validation installs each binary, and the stale `uis-x1` binary is uninstalled.
 
 #### Acceptance check
@@ -87,6 +88,21 @@ or closing the window exits it.
 - Whole-step scaling: a 10 by 20 bitmap font is tiny on a high-density display, so the text scales
   by the window's scale factor rounded to a whole number, which keeps each font pixel a sharp
   square.
+- Scale 1 for the minifb twin: minifb reports no display scale factor, and its scale option is a
+  window multiplier, so the twin draws at scale 1 and the platform enlarges it, a Wayland
+  compositor softly at a fractional factor. Chosen by the user at the minifb rung.
+  - A scale the program picks, a constant or an environment variable through `Scaled`, is the
+    bare-metal pattern, but a compositor would still enlarge it again above scale 1.
+  - minifb's own window multiplier scales in the presenter, but is fixed and sits awkwardly with
+    resizing.
+  - Fonts do not change the answer: a bitmap font needs the factor to pick its strike, and an
+    outline font needs it to pick its size, so both need what minifb does not report.
+- The scale as a ratio: every platform's factor is a ratio, Wayland's over 120 and DPI over 96, so
+  a reduced `num/den` carries it exactly and without floating point, where an `f64` rounds some
+  and a fixed denominator cannot hold DPI-derived ones. Chosen by the user after the minifb twin.
+  - It is the scale factor's type, not geometry's. Rotation and curves are real-valued, so a
+    drawer that needs them converts the ratio once, at its transform.
+  - Its own small type rather than `num-rational`, a dependency for three methods.
 - Return or window close exits: the window twin mirrors the terminal twin's Return, and a window
   can also be closed from its title bar, so both end it. Escape stays unbound, as in the terminal
   twin.
@@ -128,7 +144,8 @@ or closing the window exits it.
 - [refactor: share the pixel renderer][4] (done)
 - [refactor: split the frame from the canvas][7] (done)
 - [docs: record the pixel architecture][8] (done)
-- [feat: add the gui-minifb twin][5]
+- [feat: add the gui-minifb twin][5] (done)
+- [refactor: pass the scale as a ratio][9]
 - [feat: workspace-gui-softbuffer closing][6]
 
 ##### feat: workspace-gui-softbuffer opening
@@ -225,6 +242,22 @@ linked from `notes/README.md` and reconciled with the actor notes.
 The progression has no window program that owns its loop. A `gui-minifb` member opens a window
 with minifb and runs its own loop, drawing its frame onto the shared canvas and presenting it,
 until Return or a close.
+
+- Each pass polls the window, redraws only when the size has changed, presents the buffer, and
+  checks Return, the bare-metal loop in miniature, paced at 60 passes a second.
+- The buffer is the host's and outlives each pass, a first taste of the retained layer, since
+  minifb presents whatever the buffer holds.
+- The frame is a copy of the winit twin's without its scale rule, drawn at scale 1, and its tests
+  come with it.
+- Return on the main keys or the keypad exits, matching winit's Enter, which covers both.
+- The twin brings some 42 crates against the winit twin's 107, and the architecture note gains
+  where the scale factor comes from and why this twin has none.
+
+##### refactor: pass the scale as a ratio
+
+The winit twin rounds winit's floating-point scale factor to a whole step before drawing, so the
+exact factor is lost at the host. A `Ratio` in `pixel-canvas` carries the factor exactly from host
+to drawer, and the bitmap text rounds it only where it draws.
 
 ##### feat: workspace-gui-softbuffer closing
 
@@ -342,3 +375,4 @@ _None._
 [6]: #feat-workspace-gui-softbuffer-closing
 [7]: #refactor-split-the-frame-from-the-canvas
 [8]: #docs-record-the-pixel-architecture
+[9]: #refactor-pass-the-scale-as-a-ratio

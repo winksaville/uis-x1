@@ -9,6 +9,8 @@ the libraries they share:
 - `gui-winit-softbuffer`: a window drawn with winit and softbuffer, installed as
   `gui-winit-softbuffer`. It displays "Hello, World" until Return/Enter is pressed or the window
   is closed.
+- `gui-minifb`: the same window with minifb, whose loop is the program's own, installed as
+  `gui-minifb`. It displays "Hello, World" until Return/Enter is pressed or the window is closed.
 - `pixel-canvas`: the library the window programs share, a pixel surface that fonts, shapes, and
   other drawers write into through the embedded-graphics draw-target trait.
 
@@ -29,6 +31,7 @@ cargo test
 ```
 cargo run -p tui-rustix
 cargo run -p gui-winit-softbuffer
+cargo run -p gui-minifb
 ```
 
 ## Install
@@ -36,6 +39,7 @@ cargo run -p gui-winit-softbuffer
 ```
 cargo install --path tui-rustix --locked
 cargo install --path gui-winit-softbuffer --locked
+cargo install --path gui-minifb --locked
 ```
 
 ## License

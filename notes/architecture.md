@@ -33,7 +33,7 @@ each is one renderer and presenter pair, CPU and GPU alike.
 |---|---|---|---|
 | Terminal | ANSI renderer, the grid to bytes | The terminal | `tui-rustix` |
 | Window | Drawers over `pixel-canvas` | softbuffer | `gui-winit-softbuffer` |
-| Window | Drawers over `pixel-canvas` | minifb | `gui-minifb`, planned |
+| Window | Drawers over `pixel-canvas` | minifb | `gui-minifb` |
 | Bare-metal display | Drawers over `pixel-canvas` | A memory-mapped framebuffer | Later |
 | Window, GPU | GPU renderer, the output to draw commands | The wgpu swapchain | Later |
 
@@ -73,9 +73,31 @@ drain its messages, update its state, emit its output, and return.
   runs as a step inside the handlers, or on its own thread and wakes the loop through winit's
   proxy.
 - Program-owned: the host runs its own loop, polling input, stepping the core, drawing, and
-  presenting, as the planned `gui-minifb` twin will, and as the terminal twin's blocking read
-  does in its simplest form. It is the bare-metal shape, where the loop waits for an interrupt
+  presenting, as `gui-minifb` does, and as the terminal twin's blocking read does in its
+  simplest form. It is the bare-metal shape, where the loop waits for an interrupt
   and the interrupt handlers push into the rings.
+
+## The scale factor
+
+A display's scale factor, 2 on a typical high-density screen and fractions like 1.25 in between,
+is an input to drawing, and only a toolkit host reports it.
+
+- Bitmap fonts come in fixed sizes, strikes, so a high-density display wants a larger strike.
+  Doubling a single strike's pixels, the `Scaled` adapter, is the fallback for a font with one
+  size, and only whole steps stay sharp.
+- Outline fonts are curves, rasterized at any size, so a high-density display just asks for a
+  larger one: the point size times the dots per inch over 72 times the scale factor. They stay
+  sharp at fractional factors too.
+- Either way the drawer needs the factor before it draws. Enlarging finished pixels afterwards is
+  soft at fractional factors, whatever the font.
+- winit reports the factor, so `gui-winit-softbuffer` draws at the display's real resolution and
+  scales its bitmap font by the factor rounded to a whole step.
+- minifb reports none. Its scale option is a window multiplier, not the display's factor, and on
+  Wayland it hands the compositor a buffer at scale 1, which the compositor enlarges. So
+  `gui-minifb` draws at scale 1 and the platform enlarges the result, softly at a fractional
+  factor. On X11 nothing enlarges it.
+- Bare metal matches minifb: nothing reports a factor, and the program, which knows its display,
+  picks a strike or a scale when it is built.
 
 ## GPU rendering
 
@@ -91,8 +113,8 @@ A GPU renderer is a sibling of the pixel path, not a layer under it or over it.
 ## Workspace conventions
 
 - Twins are named for every layer of their stack that differs, `gui-winit-softbuffer` rather than
-  `gui-softbuffer` once a twin without winit was planned, and a twin's package and binary carry
-  that name alone.
+  `gui-softbuffer` once a twin without winit existed, and a twin's package and binary carry that
+  name alone.
 - Libraries are named for what they hold, `pixel-canvas` for a surface that renders nothing itself.
 - The version-of-record is the workspace manifest's, and every member inherits it.
 - Each twin keeps its own copy of the frame, a few lines once the canvas is general, until the core
