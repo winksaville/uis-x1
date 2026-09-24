@@ -30,8 +30,8 @@ some 100 crates on Linux, which a single package would make every terminal build
 Make the repo a Cargo workspace whose root manifest is only the workspace, move the terminal
 program unchanged into a `tui-rustix` member, and add two window members that show the text until
 Return: `gui-winit-softbuffer`, where winit owns the loop and softbuffer presents the pixels, and
-`gui-minifb`, which owns its loop. A bitmap font renders the text into a pixel buffer, in a
-`pixel-renderer` library member both window twins share.
+`gui-minifb`, which owns its loop. Each window twin draws the text with a bitmap font onto a
+`pixel-canvas` library member both share, a pixel surface that knows nothing of what is drawn.
 
 - Each member is named for every layer of its stack that differs, and its package and binary carry
   that name alone.
@@ -42,10 +42,11 @@ Return: `gui-winit-softbuffer`, where winit owns the loop and softbuffer present
 #### Acceptance check
 
 `cargo test` at the root runs every member's tests and passes. The terminal twin's tests pass
-unchanged apart from names, and the shared renderer's tests render the frame into a pixel buffer
-and find the text's pixels in it. The terminal twin passes the pseudo-terminal check from the last
-cycle again. In a desktop session, `gui-winit-softbuffer` and `gui-minifb` each open a window
-showing the text, and Return or closing the window exits it.
+unchanged apart from names, the canvas's tests draw pixels and scaled squares into plain buffers,
+and each window twin's tests render its frame into a pixel buffer and find the text's pixels in
+it. The terminal twin passes the pseudo-terminal check from the last cycle again. In a desktop
+session, `gui-winit-softbuffer` and `gui-minifb` each open a window showing the text, and Return
+or closing the window exits it.
 
 #### Deliberation
 
@@ -95,10 +96,22 @@ showing the text, and Return or closing the window exits it.
   frame, and their tests, so the renderer moves into a library member both window twins use, the
   start of the pixel presenter the actor notes plan. Chosen by the user over a copy.
 - The name `pixel-renderer`: a renderer turns a frame into pixels and a presenter puts pixels on
-  the screen, softbuffer or minifb here, and the name says which. Chosen by the user.
+  the screen, softbuffer or minifb here, and the name says which. Chosen by the user, and later
+  replaced by `pixel-canvas`, below.
   - A bare `renderer` was weighed, but ANSI and GPU renderers are expected beside it, and the
     bare name would not say which one it is.
   - `pixel-presenter`, the actor notes' word, would name the layer softbuffer and minifb fill.
+- The frame split from the canvas: the shared crate was a pixel surface with this program's frame
+  on top, the text, the font, and a canvas scale that existed for the font. The surface stays
+  shared as `pixel-canvas`, and the frame moves into each twin. Raised by the user after the
+  renderer's move landed.
+  - Drawers, fonts and shapes alike, draw into the canvas, and the canvas knows none of them, so
+    it depends on `embedded-graphics-core` alone, the trait, the colors, and the geometry.
+  - Scaling is a `Scaled` adapter over any draw target, since blocky scaling is a pixel operation
+    rather than a font's.
+  - Once the canvas is general the frame is a few lines, so each twin keeps its own copy, as the
+    terminal twin keeps its text.
+  - The name follows the contents: a surface drawn on, which renders nothing itself.
 - The moves as their own rungs: the terminal program, and later the renderer, move unchanged in
   rungs of their own, so each move is reviewed as a move before new code lands on it.
 - A pixel-buffer test for the window twin: the sandbox has no display, so the test renders into a
@@ -113,6 +126,8 @@ showing the text, and Return or closing the window exits it.
 - [refactor: move the tui into the workspace][2] (done)
 - [feat: add the gui-winit-softbuffer twin][3] (done)
 - [refactor: share the pixel renderer][4] (done)
+- [refactor: split the frame from the canvas][7] (done)
+- [docs: record the pixel architecture][8]
 - [feat: add the gui-minifb twin][5]
 - [feat: workspace-gui-softbuffer closing][6]
 
@@ -175,10 +190,34 @@ included, from the winit twin's library into a library member both window twins 
   rasterizer can draw into, while the text drawing stays 2D. A GPU renderer would be a sibling
   consuming the core's output, not a layer over this one.
 
+##### refactor: split the frame from the canvas
+
+The shared renderer mixes a pixel surface with this program's frame, the text, its font, and a
+canvas scale that exists for the font. The surface stays shared as `pixel-canvas`, and the frame
+moves into the winit twin.
+
+- The canvas draws at the buffer's own resolution, clips at every edge and at a short slice, and
+  clears in one pass, and it exports the `0x00RRGGBB` conversion presenters and tests share.
+- `Scaled` draws each pixel as a filled square on the target it wraps, and reports its size in
+  whole squares for drawers that lay out by it.
+- The winit twin's frame module holds the text, the colors, the scale rule, and the frame's
+  tests, which pass as they did against the old renderer, so the frame draws the same pixels.
+- The canvas's own tests cover placement, clipping on each side, a short slice, the scaled
+  square, and the scaled size.
+- This rung takes the first two bullets of the canvas generalization Todo, full resolution and
+  the scaled adapter, and leaves the retained layer, blending, and the demo there.
+
+##### docs: record the pixel architecture
+
+The layering this cycle settled lives only in the cycle record and the session. A living
+`notes/architecture.md` names the layers, core, drawer, canvas, presenter, and renderer, sketches
+the CPU and GPU pipelines, sets out the two loop shapes, and records the workspace conventions,
+linked from `notes/README.md` and reconciled with the actor notes.
+
 ##### feat: add the gui-minifb twin
 
 The progression has no window program that owns its loop. A `gui-minifb` member opens a window
-with minifb and runs its own loop, drawing the frame through the shared renderer and presenting it,
+with minifb and runs its own loop, drawing its frame onto the shared canvas and presenting it,
 until Return or a close.
 
 ##### feat: workspace-gui-softbuffer closing
@@ -241,12 +280,10 @@ The core emits a cell grid and the ANSI and pixel presenters consume it, the cla
 
 ### Generalize the pixel canvas
 
-The `pixel-renderer` canvas is shaped around the bitmap font, so free 2D drawing, a sine wave or a
-pencil following the mouse in color or grey, gets the font's blocky resolution and is erased by
-the next frame. Its draw-target trait already covers lines, polylines, shapes, and colors.
+The `pixel-canvas` surface draws at physical resolution through a draw-target trait that covers
+lines, polylines, shapes, and colors, but free 2D drawing, a sine wave or a pencil following the
+mouse in color or grey, is erased by the next frame and cannot shade or blend.
 
-- Draw at physical resolution, the resolution the mouse reports, with a scaled adapter over any
-  draw target for what should stay blocky, the bitmap text.
 - Keep a retained pixel layer that strokes accumulate in, copied into the presented buffer each
   frame, since softbuffer does not promise last frame's contents.
 - Blend for translucent or pressure-shaded strokes, by a small blend step on the canvas or by a 2D
@@ -256,6 +293,26 @@ the next frame. Its draw-target trait already covers lines, polylines, shapes, a
 - Free drawing does not fit a cell grid, so the core's output needs a draw list beside the grid,
   the same input a GPU renderer would take. Settle that with [TUI or GUI
   backend](#tui-or-gui-backend).
+
+### Draw text along a path
+
+Text drawn along a straight or curved path, each character scaled on its own, is beyond a bitmap
+font, which can be neither rotated nor scaled cleanly. It is a pipeline of drawers above the
+canvas, and the canvas only blends the result.
+
+- Outline fonts: TrueType or OpenType glyphs, read by `ttf-parser` and rasterized by `ab_glyph` or
+  `fontdue`, with `rustybuzz` for shaping beyond ASCII.
+- Layout: the path flattened to segments with cumulative lengths, so each glyph's advance becomes
+  a distance along the path, a point, and a tangent angle.
+- Transform per glyph: translate to the point, rotate to the tangent, and apply the character's
+  scale, then rasterize the outline to coverage.
+- The canvas blends color by coverage, the blend in [Generalize the pixel
+  canvas](#generalize-the-pixel-canvas), which this needs first.
+- A shorter route: tiny-skia fills a path under any transform with antialiasing, so each glyph's
+  outline becomes a path filled with its transform, at the cost of an allocator and a conversion
+  from premultiplied RGBA to present. We think it builds without std, unchecked.
+- On a GPU the pipeline is the same down to rasterizing, where glyphs are usually signed distance
+  field textures that rotate and scale cleanly.
 
 ## Ideas
 
@@ -277,3 +334,5 @@ _None._
 [4]: #refactor-share-the-pixel-renderer
 [5]: #feat-add-the-gui-minifb-twin
 [6]: #feat-workspace-gui-softbuffer-closing
+[7]: #refactor-split-the-frame-from-the-canvas
+[8]: #docs-record-the-pixel-architecture

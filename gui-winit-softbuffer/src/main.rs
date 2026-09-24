@@ -1,13 +1,17 @@
 //! Display "Hello, World" in a window until Return is pressed or the window is closed, then exit.
 //!
 //! The window twin of the terminal program: winit opens the window and delivers its events, and
-//! softbuffer presents a pixel buffer the `pixel-renderer` member draws the text into.
+//! softbuffer presents a pixel buffer the frame module draws the text into, through the
+//! `pixel-canvas` member.
+
+mod frame;
 
 use std::error::Error;
 use std::num::NonZeroU32;
 use std::rc::Rc;
 
-use pixel_renderer::{Canvas, render, scale_for};
+use frame::{render, scale_for};
+use pixel_canvas::Canvas;
 use softbuffer::{Context, Surface};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
@@ -106,12 +110,10 @@ fn draw(shown: &mut Shown) -> Result<(), BoxError> {
     shown.surface.resize(width, height)?;
     let mut buffer = shown.surface.buffer_mut()?;
     let scale = scale_for(shown.window.scale_factor());
-    render(&mut Canvas::new(
-        &mut buffer,
-        size.width,
-        size.height,
+    render(
+        &mut Canvas::new(&mut buffer, size.width, size.height),
         scale,
-    ));
+    );
     buffer.present()?;
     Ok(())
 }

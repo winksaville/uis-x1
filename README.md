@@ -9,8 +9,8 @@ the libraries they share:
 - `gui-winit-softbuffer`: a window drawn with winit and softbuffer, installed as
   `gui-winit-softbuffer`. It displays "Hello, World" until Return/Enter is pressed or the window
   is closed.
-- `pixel-renderer`: the library the window programs share, which draws the text into a pixel
-  buffer with a bitmap font.
+- `pixel-canvas`: the library the window programs share, a pixel surface that fonts, shapes, and
+  other drawers write into through the embedded-graphics draw-target trait.
 
 ## Build
 
