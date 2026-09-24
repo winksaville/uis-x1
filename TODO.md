@@ -127,7 +127,7 @@ or closing the window exits it.
 - [feat: add the gui-winit-softbuffer twin][3] (done)
 - [refactor: share the pixel renderer][4] (done)
 - [refactor: split the frame from the canvas][7] (done)
-- [docs: record the pixel architecture][8]
+- [docs: record the pixel architecture][8] (done)
 - [feat: add the gui-minifb twin][5]
 - [feat: workspace-gui-softbuffer closing][6]
 
@@ -213,6 +213,12 @@ The layering this cycle settled lives only in the cycle record and the session. 
 `notes/architecture.md` names the layers, core, drawer, canvas, presenter, and renderer, sketches
 the CPU and GPU pipelines, sets out the two loop shapes, and records the workspace conventions,
 linked from `notes/README.md` and reconciled with the actor notes.
+
+- Each layer is defined by what it does not know, so a layer can be swapped without the others
+  noticing, and the host is named as the layer that owns or joins the loop.
+- The actor notes' "presenter" is this file's renderer, and the note maps the terms rather than
+  editing the dated discussion.
+- The planned minifb twin appears as planned, and its rung updates the note when it lands.
 
 ##### feat: add the gui-minifb twin
 
