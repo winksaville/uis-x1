@@ -1,0 +1,14 @@
+[package]
+name = "gui-winit-softbuffer"
+version.workspace = true
+edition.workspace = true
+description = "UI experiments toward an actor-model UI with TUI and GUI backends"
+
+[dependencies]
+embedded-graphics = "0.8"
+softbuffer = "0.4"
+winit = "0.30"
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"

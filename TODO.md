@@ -20,30 +20,32 @@ block](agent-data/notes.md#the-in-progress-block).
 
 #### Problem
 
-The project is one package holding the terminal program, and the progression needs a window twin
-of it, with more twins of each kind expected. A window stack pulls in some 86 crates on Linux,
-which a single package would make every terminal build compile.
+The project is one package holding the terminal program, and the progression needs window twins of
+it in two loop shapes, one where the toolkit owns the loop, as desktops require, and one where the
+program owns it, as bare metal does, with more twins of each kind expected. A window stack pulls in
+some 100 crates on Linux, which a single package would make every terminal build compile.
 
 #### Solution
 
 Make the repo a Cargo workspace whose root manifest is only the workspace, move the terminal
-program unchanged into a `tui-rustix` member, and add a `gui-softbuffer` member that shows the text
-in a window until Return. The window twin draws with winit and softbuffer, and a bitmap font
-renders the text into the pixel buffer.
+program unchanged into a `tui-rustix` member, and add two window members that show the text until
+Return: `gui-winit-softbuffer`, where winit owns the loop and softbuffer presents the pixels, and
+`gui-minifb`, which owns its loop. A bitmap font renders the text into a pixel buffer, in a library
+member both window twins share.
 
-- Each member is named for its stack, and its package and binary carry that name alone,
-  `tui-rustix` and `gui-softbuffer`.
-- The version-of-record moves to the workspace manifest, and both members inherit it.
+- Each member is named for every layer of its stack that differs, and its package and binary carry
+  that name alone.
+- The version-of-record moves to the workspace manifest, and every member inherits it.
 - The text scales by the window's scale factor in whole steps.
 - Validation installs each binary, and the stale `uis-x1` binary is uninstalled.
 
 #### Acceptance check
 
-`cargo test` at the root runs both members' tests and passes. The terminal twin's tests pass
-unchanged apart from names, and a window-twin test renders the frame into a pixel buffer and finds
-the text's pixels in it. The terminal twin passes the pseudo-terminal check from the last cycle
-again. In a desktop session, `gui-softbuffer` opens a window showing the text, and Return or closing
-the window exits it.
+`cargo test` at the root runs every member's tests and passes. The terminal twin's tests pass
+unchanged apart from names, and the shared renderer's tests render the frame into a pixel buffer
+and find the text's pixels in it. The terminal twin passes the pseudo-terminal check from the last
+cycle again. In a desktop session, `gui-winit-softbuffer` and `gui-minifb` each open a window
+showing the text, and Return or closing the window exits it.
 
 #### Deliberation
 
@@ -56,6 +58,13 @@ the window exits it.
     would sit lopsided beside it.
 - Members named for their stack: more twins of each kind are expected, `tui-ratatui` for one, so a
   member's name says what differs.
+  - The opening named the window twin `gui-softbuffer`, since winit is common to nearly every Rust
+    GUI stack. With a twin that has no winit to follow, the name spells out both layers,
+    `gui-winit-softbuffer`, chosen by the user at the window twin's review.
+- Two window twins in one cycle: winit owns the loop, the shape desktop toolkits impose and the
+  one the actor model must fit on Windows and macOS, while minifb leaves the loop to the program,
+  the shape bare metal takes. The user added the second at the window twin's review, as a rung
+  rather than a Todo.
 - Bare stack names on packages and binaries: a member's package and binary are its directory's
   name, which is simpler to type and to read, chosen by the user at the move's review.
   - The opening planned a project prefix, `uis-x1-tui-rustix`, since `cargo install` puts every
@@ -80,10 +89,13 @@ the window exits it.
 - Return or window close exits: the window twin mirrors the terminal twin's Return, and a window
   can also be closed from its title bar, so both end it. Escape stays unbound, as in the terminal
   twin.
-- The text copied, not shared: each twin keeps its own copy of the text, since a shared crate for
-  one constant is premature and the core crate arrives with the cell grid.
-- The move as its own rung: the terminal program moves unchanged in a rung of its own, so the move
-  is reviewed as a move before any window code lands on it.
+- The text copied, not shared: the terminal twin keeps its own copy of the text, since a shared
+  crate for one constant is premature and the core crate arrives with the cell grid.
+- The renderer shared at its second user: the minifb twin would otherwise copy the canvas, the
+  frame, and their tests, so the renderer moves into a library member both window twins use, the
+  start of the pixel presenter the actor notes plan. Chosen by the user over a copy.
+- The moves as their own rungs: the terminal program, and later the renderer, move unchanged in
+  rungs of their own, so each move is reviewed as a move before new code lands on it.
 - A pixel-buffer test for the window twin: the sandbox has no display, so the test renders into a
   buffer and checks pixels, and only the window itself is checked by hand.
 - No restart between cycles: the user opened this cycle in the session that ran the last one.
@@ -94,8 +106,10 @@ the window exits it.
 
 - [feat: workspace-gui-softbuffer opening][1] (done)
 - [refactor: move the tui into the workspace][2] (done)
-- [feat: add the gui-softbuffer twin][3]
-- [feat: workspace-gui-softbuffer closing][4]
+- [feat: add the gui-winit-softbuffer twin][3] (done)
+- [refactor: share the pixel renderer][4]
+- [feat: add the gui-minifb twin][5]
+- [feat: workspace-gui-softbuffer closing][6]
 
 ##### feat: workspace-gui-softbuffer opening
 
@@ -122,11 +136,37 @@ its dependencies. The root becomes a workspace-only manifest, and the program mo
 - Validation installs from `tui-rustix/`, since `cargo install --path .` needs a package at the
   root, and the stale `uis-x1` binary is uninstalled.
 
-##### feat: add the gui-softbuffer twin
+##### feat: add the gui-winit-softbuffer twin
 
-The progression has no window program. A `gui-softbuffer` member opens a window with winit, draws
-the text with a bitmap font into a softbuffer pixel buffer, and exits on Return or when the window
-closes.
+The progression has no window program. A `gui-winit-softbuffer` member opens a window with winit,
+draws the text with a bitmap font into a softbuffer pixel buffer, and exits on Return or when the
+window closes.
+
+- The drawing is the library's and the window is the binary's: the library draws the frame into
+  any slice of pixels, so the tests and a later framebuffer presenter use it with no window.
+- The canvas is an embedded-graphics draw target that turns each font pixel into a square of
+  whole screen pixels, and embedded-graphics clips at the canvas's size in font pixels.
+- The text starts at the top left corner, where the terminal twin's cursor starts, which is also
+  where a cell grid's first cell will sit.
+- A handler cannot return an error in winit's application trait, so the first error is kept and
+  ends the event loop, and `main` returns it.
+- The tests check that the frame holds only the text and background colors with the text inside
+  its box, that scale 2 is scale 1 with each pixel doubled, and that a clipped frame is the top
+  left corner of the unclipped one.
+- The terminal member still builds on its own four crates, and the window member brings some 105.
+- The member was `gui-softbuffer` until its review renamed it for both layers, the next rungs'
+  twin having no winit.
+
+##### refactor: share the pixel renderer
+
+The minifb twin needs the same canvas and frame as the winit twin. They move unchanged, tests
+included, from the winit twin's library into a library member both window twins depend on.
+
+##### feat: add the gui-minifb twin
+
+The progression has no window program that owns its loop. A `gui-minifb` member opens a window
+with minifb and runs its own loop, drawing the frame through the shared renderer and presenting it,
+until Return or a close.
 
 ##### feat: workspace-gui-softbuffer closing
 
@@ -202,5 +242,7 @@ _None._
 
 [1]: #feat-workspace-gui-softbuffer-opening
 [2]: #refactor-move-the-tui-into-the-workspace
-[3]: #feat-add-the-gui-softbuffer-twin
-[4]: #feat-workspace-gui-softbuffer-closing
+[3]: #feat-add-the-gui-winit-softbuffer-twin
+[4]: #refactor-share-the-pixel-renderer
+[5]: #feat-add-the-gui-minifb-twin
+[6]: #feat-workspace-gui-softbuffer-closing

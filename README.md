@@ -5,6 +5,9 @@ A Cargo workspace of Rust programs toward an actor-model UI, each member named f
 - `tui-rustix`: a TUI on the alternate screen over rustix, installed as `tui-rustix`. It
   displays "Hello, World" until Return/Enter is pressed, then exits back to the terminal's
   original screen.
+- `gui-winit-softbuffer`: a window drawn with winit and softbuffer, installed as
+  `gui-winit-softbuffer`. It displays "Hello, World" until Return/Enter is pressed or the window
+  is closed.
 
 ## Build
 
@@ -22,12 +25,14 @@ cargo test
 
 ```
 cargo run -p tui-rustix
+cargo run -p gui-winit-softbuffer
 ```
 
 ## Install
 
 ```
 cargo install --path tui-rustix --locked
+cargo install --path gui-winit-softbuffer --locked
 ```
 
 ## License
