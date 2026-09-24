@@ -1,5 +1,5 @@
 //! The "Hello, World" frame for a window: what it shows and how it is drawn into a pixel buffer,
-//! shared by the binary and its tests.
+//! shared by the window twins and its tests.
 //!
 //! - The text is drawn with a bitmap font from embedded-graphics, so the drawing needs nothing
 //!   but a slice of pixels and runs the same with or without a window.

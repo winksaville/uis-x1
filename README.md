@@ -1,6 +1,7 @@
 # Experiment with UIs
 
-A Cargo workspace of Rust programs toward an actor-model UI, each member named for its stack:
+A Cargo workspace of Rust programs toward an actor-model UI, each program named for its stack, and
+the libraries they share:
 
 - `tui-rustix`: a TUI on the alternate screen over rustix, installed as `tui-rustix`. It
   displays "Hello, World" until Return/Enter is pressed, then exits back to the terminal's
@@ -8,6 +9,8 @@ A Cargo workspace of Rust programs toward an actor-model UI, each member named f
 - `gui-winit-softbuffer`: a window drawn with winit and softbuffer, installed as
   `gui-winit-softbuffer`. It displays "Hello, World" until Return/Enter is pressed or the window
   is closed.
+- `pixel-renderer`: the library the window programs share, which draws the text into a pixel
+  buffer with a bitmap font.
 
 ## Build
 

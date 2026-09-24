@@ -1,13 +1,11 @@
 [package]
-name = "gui-winit-softbuffer"
+name = "pixel-renderer"
 version.workspace = true
 edition.workspace = true
 description = "UI experiments toward an actor-model UI with TUI and GUI backends"
 
 [dependencies]
-pixel-renderer = { path = "../pixel-renderer" }
-softbuffer = "0.4"
-winit = "0.30"
+embedded-graphics = "0.8"
 
 [lints.clippy]
 unwrap_used = "warn"

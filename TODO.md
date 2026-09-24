@@ -30,8 +30,8 @@ some 100 crates on Linux, which a single package would make every terminal build
 Make the repo a Cargo workspace whose root manifest is only the workspace, move the terminal
 program unchanged into a `tui-rustix` member, and add two window members that show the text until
 Return: `gui-winit-softbuffer`, where winit owns the loop and softbuffer presents the pixels, and
-`gui-minifb`, which owns its loop. A bitmap font renders the text into a pixel buffer, in a library
-member both window twins share.
+`gui-minifb`, which owns its loop. A bitmap font renders the text into a pixel buffer, in a
+`pixel-renderer` library member both window twins share.
 
 - Each member is named for every layer of its stack that differs, and its package and binary carry
   that name alone.
@@ -94,6 +94,11 @@ showing the text, and Return or closing the window exits it.
 - The renderer shared at its second user: the minifb twin would otherwise copy the canvas, the
   frame, and their tests, so the renderer moves into a library member both window twins use, the
   start of the pixel presenter the actor notes plan. Chosen by the user over a copy.
+- The name `pixel-renderer`: a renderer turns a frame into pixels and a presenter puts pixels on
+  the screen, softbuffer or minifb here, and the name says which. Chosen by the user.
+  - A bare `renderer` was weighed, but ANSI and GPU renderers are expected beside it, and the
+    bare name would not say which one it is.
+  - `pixel-presenter`, the actor notes' word, would name the layer softbuffer and minifb fill.
 - The moves as their own rungs: the terminal program, and later the renderer, move unchanged in
   rungs of their own, so each move is reviewed as a move before new code lands on it.
 - A pixel-buffer test for the window twin: the sandbox has no display, so the test renders into a
@@ -107,7 +112,7 @@ showing the text, and Return or closing the window exits it.
 - [feat: workspace-gui-softbuffer opening][1] (done)
 - [refactor: move the tui into the workspace][2] (done)
 - [feat: add the gui-winit-softbuffer twin][3] (done)
-- [refactor: share the pixel renderer][4]
+- [refactor: share the pixel renderer][4] (done)
 - [feat: add the gui-minifb twin][5]
 - [feat: workspace-gui-softbuffer closing][6]
 
@@ -161,6 +166,14 @@ window closes.
 
 The minifb twin needs the same canvas and frame as the winit twin. They move unchanged, tests
 included, from the winit twin's library into a library member both window twins depend on.
+
+- The `pixel-renderer` member holds the canvas, the frame, the scale rule, and their tests, and the
+  embedded-graphics dependency moves with them, so the winit twin is a binary alone over winit,
+  softbuffer, and the renderer.
+- The module docs change only where they named the old home.
+- The canvas is the part a later software 3D renderer would share, since it is a buffer any
+  rasterizer can draw into, while the text drawing stays 2D. A GPU renderer would be a sibling
+  consuming the core's output, not a layer over this one.
 
 ##### feat: add the gui-minifb twin
 
@@ -225,6 +238,24 @@ supervisor actors and stdin as a device thread, per [actor-model-1.md](notes/act
 
 The core emits a cell grid and the ANSI and pixel presenters consume it, the claim in
 [actor-model-1.md](notes/actor-model-1.md) to verify.
+
+### Generalize the pixel canvas
+
+The `pixel-renderer` canvas is shaped around the bitmap font, so free 2D drawing, a sine wave or a
+pencil following the mouse in color or grey, gets the font's blocky resolution and is erased by
+the next frame. Its draw-target trait already covers lines, polylines, shapes, and colors.
+
+- Draw at physical resolution, the resolution the mouse reports, with a scaled adapter over any
+  draw target for what should stay blocky, the bitmap text.
+- Keep a retained pixel layer that strokes accumulate in, copied into the presented buffer each
+  frame, since softbuffer does not promise last frame's contents.
+- Blend for translucent or pressure-shaded strokes, by a small blend step on the canvas or by a 2D
+  rasterizer such as tiny-skia, whose premultiplied RGBA needs a conversion to present.
+- Prove it with a demo that draws a sine wave and follows the mouse with a pencil, as its own twin
+  or as a mode of the winit twin.
+- Free drawing does not fit a cell grid, so the core's output needs a draw list beside the grid,
+  the same input a GPU renderer would take. Settle that with [TUI or GUI
+  backend](#tui-or-gui-backend).
 
 ## Ideas
 
