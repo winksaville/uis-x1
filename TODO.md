@@ -103,6 +103,16 @@ or closing the window exits it.
   - It is the scale factor's type, not geometry's. Rotation and curves are real-valued, so a
     drawer that needs them converts the ratio once, at its transform.
   - Its own small type rather than `num-rational`, a dependency for three methods.
+- The module that draws the frame named `renderer`: a frame is the picture and a renderer makes
+  it, so the module is named for its job. Chosen by the user during the ratio rung, folded into
+  it rather than run as a rung of its own.
+  - A `Frame` type returned by the renderer was weighed. The renderer draws into storage the
+    presenter owns, so an owned frame would add an allocation and a copy per frame, and it waits
+    for the actors, where a frame is a message from renderer to presenter.
+- Widgets report, one renderer draws: under actors a widget sends its new look as data and one
+  renderer draws the whole frame on the host's frame clock, rather than each widget drawing into
+  the framebuffer on a change or on request. Recorded in the architecture note, the user's
+  question during the ratio rung.
 - Return or window close exits: the window twin mirrors the terminal twin's Return, and a window
   can also be closed from its title bar, so both end it. Escape stays unbound, as in the terminal
   twin.
@@ -145,7 +155,7 @@ or closing the window exits it.
 - [refactor: split the frame from the canvas][7] (done)
 - [docs: record the pixel architecture][8] (done)
 - [feat: add the gui-minifb twin][5] (done)
-- [refactor: pass the scale as a ratio][9]
+- [refactor: pass the scale as a ratio][9] (done)
 - [feat: workspace-gui-softbuffer closing][6]
 
 ##### feat: workspace-gui-softbuffer opening
@@ -259,6 +269,25 @@ The winit twin rounds winit's floating-point scale factor to a whole step before
 exact factor is lost at the host. A `Ratio` in `pixel-canvas` carries the factor exactly from host
 to drawer, and the bitmap text rounds it only where it draws.
 
+- `Ratio` is reduced on construction, so 150/120 and 5/4 compare equal, and its denominator is
+  nonzero by type. It offers the whole number it equals, if any, and the nearest whole step.
+- The rounding compares the remainder with what is left of the denominator instead of doubling
+  it, so it cannot overflow at any value, which the tests check at the extremes.
+- The winit twin reads winit's factor over 120, Wayland's unit, and a factor that is not a
+  positive number becomes 0, which draws as 1. The minifb twin passes 1.
+- Both frames take the ratio and round it where the bitmap text draws, and a new test in each
+  checks that 5/4 draws as 1 and 3/2 as 2.
+- The winit twin's conversion carries one `unwrap_or`, justified in place, since its denominator
+  is the constant 120.
+- The frames' docs say the rounding is this frame's choice, for sharpness and simplicity, since a
+  resampler or an outline font could use a fraction exactly.
+- The architecture note defines a frame, adds a frame column to the pipelines, and says whole
+  steps are a choice rather than a limit of bitmap fonts.
+- Each twin's `frame` module is now `renderer`, since it draws the frame rather than being one,
+  and its text is marked as the core's stand-in.
+- The architecture note gains rendering with actors: widgets report changes as data, one UI actor
+  marks what is dirty, the host's frame clock asks for a frame, and one renderer draws it.
+
 ##### feat: workspace-gui-softbuffer closing
 
 Closing out the cycle.
@@ -327,6 +356,8 @@ mouse in color or grey, is erased by the next frame and cannot shade or blend.
   frame, since softbuffer does not promise last frame's contents.
 - Blend for translucent or pressure-shaded strokes, by a small blend step on the canvas or by a 2D
   rasterizer such as tiny-skia, whose premultiplied RGBA needs a conversion to present.
+- Scale bitmap drawers by a fraction once the blend exists, by area coverage or sharp bilinear,
+  as a drawer beside `Scaled`, which stays whole-step.
 - Prove it with a demo that draws a sine wave and follows the mouse with a pencil, as its own twin
   or as a mode of the winit twin.
 - Free drawing does not fit a cell grid, so the core's output needs a draw list beside the grid,

@@ -3,5 +3,5 @@ resolver = "3"
 members = ["gui-minifb", "gui-winit-softbuffer", "pixel-canvas", "tui-rustix"]
 
 [workspace.package]
-version = "0.1.2-6"
+version = "0.1.2-7"
 edition = "2024"

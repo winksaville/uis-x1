@@ -8,13 +8,13 @@
 //! - minifb reports no display scale factor, so the frame is drawn at scale 1 and the platform
 //!   enlarges it when the display's scale is above 1, as a Wayland compositor does.
 
-mod frame;
+mod renderer;
 
 use std::error::Error;
 
-use frame::render;
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
-use pixel_canvas::Canvas;
+use pixel_canvas::{Canvas, Ratio};
+use renderer::render;
 
 /// A boxed error, so one type carries minifb's errors out of `main`.
 type BoxError = Box<dyn Error>;
@@ -26,7 +26,7 @@ const WIDTH: usize = 800;
 const HEIGHT: usize = 600;
 
 /// The frame's scale, 1 since minifb reports no scale factor to derive one from.
-const SCALE: u32 = 1;
+const SCALE: Ratio = Ratio::ONE;
 
 /// How often the loop runs, in passes per second, so an idle window does not spin.
 const FPS: usize = 60;

@@ -5,10 +5,13 @@
 //!   crate built on that trait draw into it.
 //! - `Scaled` wraps any draw target and draws each pixel as a square, for what should stay
 //!   blocky at a higher resolution, a bitmap font for one.
+//! - `Ratio` carries a display's scale factor exactly, as a fraction, from the host to whichever
+//!   drawer decides how to use it.
 //! - Only `embedded-graphics-core` is a dependency: the trait, the colors, and the geometry, with
 //!   no fonts and no shapes, which belong to the drawers.
 
 use core::convert::Infallible;
+use core::num::NonZeroU32;
 
 use embedded_graphics_core::pixelcolor::{Rgb888, RgbColor};
 use embedded_graphics_core::prelude::{DrawTarget, OriginDimensions, Pixel, Point, Size};
@@ -17,6 +20,87 @@ use embedded_graphics_core::primitives::Rectangle;
 /// Convert a color to the buffer's `0x00RRGGBB` form.
 pub fn to_pixel(color: Rgb888) -> u32 {
     (u32::from(color.r()) << 16) | (u32::from(color.g()) << 8) | u32::from(color.b())
+}
+
+/// A scale as an exact fraction, `num / den`, kept reduced so equal scales compare equal.
+///
+/// - Every platform's scale factor is a fraction, Wayland's over 120 and DPI over 96, so a ratio
+///   carries it exactly and with no floating point, from the host to the drawer.
+/// - A drawer decides what to do with it: a bitmap font rounds it to a whole step, and a drawer
+///   that rotates or curves converts it once, at its transform.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Ratio {
+    /// The numerator.
+    num: u32,
+    /// The denominator, never 0.
+    den: NonZeroU32,
+}
+
+impl Ratio {
+    /// The scale of 1.
+    pub const ONE: Ratio = Ratio {
+        num: 1,
+        den: NonZeroU32::MIN,
+    };
+
+    /// The fraction `num / den`, reduced, or `None` when `den` is 0.
+    pub fn new(num: u32, den: u32) -> Option<Ratio> {
+        let divisor = gcd(num, den);
+        Some(Ratio {
+            num: num / divisor,
+            den: NonZeroU32::new(den / divisor)?,
+        })
+    }
+
+    /// The numerator, after reduction.
+    pub fn num(self) -> u32 {
+        self.num
+    }
+
+    /// The denominator, after reduction.
+    pub fn den(self) -> u32 {
+        self.den.get()
+    }
+
+    /// The whole number the ratio equals, or `None` when it has a fractional part.
+    pub fn whole(self) -> Option<u32> {
+        (self.den() == 1).then_some(self.num)
+    }
+
+    /// The nearest whole number, a half rounding up, and at least 1, for whole-step drawers.
+    ///
+    /// The remainder is compared with what is left of the denominator rather than doubled, so
+    /// nothing overflows, and the quotient gains 1 only when the denominator is at least 2, which
+    /// leaves it at most half of `u32::MAX`.
+    pub fn round(self) -> u32 {
+        let den = self.den();
+        let (quotient, remainder) = (self.num / den, self.num % den);
+        let nearest = if remainder >= den - remainder {
+            quotient + 1
+        } else {
+            quotient
+        };
+        nearest.max(1)
+    }
+}
+
+impl From<u32> for Ratio {
+    /// The whole number `n` as the ratio `n / 1`.
+    fn from(n: u32) -> Ratio {
+        Ratio {
+            num: n,
+            den: NonZeroU32::MIN,
+        }
+    }
+}
+
+/// The greatest common divisor of `a` and `b`, at least 1 so it always divides.
+fn gcd(a: u32, b: u32) -> u32 {
+    let (mut a, mut b) = (a, b);
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a.max(1)
 }
 
 /// A pixel buffer that drawers write into, one `0x00RRGGBB` value per pixel.
@@ -140,7 +224,11 @@ impl<T: DrawTarget + OriginDimensions> DrawTarget for Scaled<'_, T> {
 
 #[cfg(test)]
 mod tests {
-    //! The canvas and the scaled adapter, drawn into plain buffers.
+    //! The ratio's arithmetic, and the canvas and the scaled adapter drawn into plain buffers.
+    //!
+    //! Panicking on a setup failure is the right test behavior, so the crate's `expect_used` lint
+    //! is allowed here.
+    #![allow(clippy::expect_used)]
 
     use super::*;
 
@@ -153,6 +241,47 @@ mod tests {
     /// A new `width` by `height` buffer holding `UNTOUCHED`.
     fn buffer(width: u32, height: u32) -> Vec<u32> {
         vec![UNTOUCHED; width as usize * height as usize]
+    }
+
+    /// A ratio reduces on construction, so equal scales compare equal, and a zero denominator
+    /// is refused.
+    #[test]
+    fn ratio_reduces() {
+        let ratio = Ratio::new(150, 120).expect("nonzero denominator");
+        assert_eq!((ratio.num(), ratio.den()), (5, 4));
+        assert_eq!(Ratio::new(240, 120), Some(Ratio::from(2)));
+        assert_eq!(Ratio::new(0, 120), Some(Ratio::from(0)));
+        assert_eq!(Ratio::new(1, 0), None);
+        assert_eq!(Ratio::ONE, Ratio::from(1));
+    }
+
+    /// A ratio is whole only when it has no fractional part.
+    #[test]
+    fn ratio_whole() {
+        assert_eq!(Ratio::from(3).whole(), Some(3));
+        assert_eq!(Ratio::new(5, 4).and_then(Ratio::whole), None);
+    }
+
+    /// A ratio rounds to the nearest whole number, a half up, and never below 1, even at the
+    /// extremes.
+    #[test]
+    fn ratio_rounds() {
+        let cases = [
+            ((0, 1), 1),
+            ((1, 3), 1),
+            ((5, 4), 1),
+            ((3, 2), 2),
+            ((7, 4), 2),
+            ((2, 1), 2),
+            ((5, 2), 3),
+            ((u32::MAX, 1), u32::MAX),
+            ((u32::MAX, 2), u32::MAX / 2 + 1),
+            ((u32::MAX, u32::MAX), 1),
+        ];
+        for ((num, den), expected) in cases {
+            let ratio = Ratio::new(num, den).expect("nonzero denominator");
+            assert_eq!(ratio.round(), expected, "{num}/{den}");
+        }
     }
 
     /// Colors convert to `0x00RRGGBB`.

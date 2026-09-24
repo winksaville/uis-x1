@@ -1,17 +1,17 @@
 //! Display "Hello, World" in a window until Return is pressed or the window is closed, then exit.
 //!
 //! The window twin of the terminal program: winit opens the window and delivers its events, and
-//! softbuffer presents a pixel buffer the frame module draws the text into, through the
+//! softbuffer presents a pixel buffer the renderer module draws the frame into, through the
 //! `pixel-canvas` member.
 
-mod frame;
+mod renderer;
 
 use std::error::Error;
 use std::num::NonZeroU32;
 use std::rc::Rc;
 
-use frame::{render, scale_for};
 use pixel_canvas::Canvas;
+use renderer::{render, scale_for};
 use softbuffer::{Context, Surface};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
