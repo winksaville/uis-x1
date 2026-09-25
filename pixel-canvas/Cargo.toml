@@ -1,0 +1,12 @@
+[package]
+name = "pixel-canvas"
+version.workspace = true
+edition.workspace = true
+description = "UI experiments toward an actor-model UI with TUI and GUI backends"
+
+[dependencies]
+embedded-graphics-core = "0.4"
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"

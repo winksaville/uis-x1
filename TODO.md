@@ -28,10 +28,45 @@ Entries are in priority order, the first highest, and reprioritizing is moving a
 `###` heading, so a citation is a link to its anchor. Use the [Prose
 form](agent-data/prose.md#prose-form).
 
-### The GUI twin
+### Commit the config file form entry
 
-The same program as a window: winit, softbuffer, and a bitmap font blitted into a grid-shaped
-buffer, so the later cell-grid presenter is a refactor rather than a rewrite.
+The agent-files name the workspace config `.vc-config.md`, and this work-repo's is
+`.vc-config.toml`. The custom.md entry that reads one as the other was set aside during the
+workspace-gui-softbuffer cycle, since an agent-file change is its own cycle.
+
+- Add the entry below to custom.md's `## Project conventions and overrides`, first in its list,
+  as its own cycle. `tmp/custom-md.patch` holds the same text as a patch while `tmp/` survives.
+- Retire it when [Propose the two config file forms to the
+  set](#propose-the-two-config-file-forms-to-the-set) lands in the payload and is adopted.
+
+```markdown
+- Config file form: the workspace config is either `.vc-config.toml`, plain TOML, or
+  `.vc-config.md`, whose fences tagged `toml` hold it, and this work-repo uses the first.
+  Wherever the agent-files say `.vc-config.md`, read it as whichever form the repo has.
+  Supersedes the file name in [The dual-repo model](AGENTS.md#the-dual-repo-model) and
+  [.vc-config.md](agent-data/jj.md#vc-configmd).
+```
+
+### Propose the two config file forms to the set
+
+The set's [.vc-config.md](agent-data/jj.md#vc-configmd) section names one file form, and vc-x1
+reads two, a plain `.vc-config.toml` and a `.vc-config.md` whose `toml` fences hold the config.
+Propose that the section name both, so no adopter needs a custom.md entry for it.
+
+### Fix minifb's Wayland drop order upstream
+
+minifb 0.28's Wayland backend declares its event queue before the objects on it, so its drop
+destroys the queue first and libwayland warns, and `gui-minifb` avoids it by forgetting its
+window on Wayland.
+
+- Fork minifb from its `v0.28.0` tag with one commit: the event queue declared last, or the
+  objects destroyed first in a `Drop`, so the fork is the release plus one fix.
+- Point `gui-minifb` at the fork by git, pinned to that commit, remove the Wayland forget, and
+  check by hand that the exit prints nothing, on the cycle's bookmark before it lands.
+- Offer the commit upstream as a pull request, the user's call since it publishes.
+- Park the return to crates.io in `## Waiting`, conditioned on a minifb release carrying the fix.
+- A headless compositor, `weston --backend=headless`, could make the exit check automatic, if
+  Wayland regressions become a pattern.
 
 ### Record the actor access rule
 
@@ -52,6 +87,44 @@ supervisor actors and stdin as a device thread, per [actor-model-1.md](notes/act
 The core emits a cell grid and the ANSI and pixel presenters consume it, the claim in
 [actor-model-1.md](notes/actor-model-1.md) to verify.
 
+### Generalize the pixel canvas
+
+The `pixel-canvas` surface draws at physical resolution through a draw-target trait that covers
+lines, polylines, shapes, and colors, but free 2D drawing, a sine wave or a pencil following the
+mouse in color or grey, is erased by the next frame and cannot shade or blend.
+
+- Keep a retained pixel layer that strokes accumulate in, copied into the presented buffer each
+  frame, since softbuffer does not promise last frame's contents.
+- Blend for translucent or pressure-shaded strokes, by a small blend step on the canvas or by a 2D
+  rasterizer such as tiny-skia, whose premultiplied RGBA needs a conversion to present.
+- Scale bitmap drawers by a fraction once the blend exists, by area coverage or sharp bilinear,
+  as a drawer beside `Scaled`, which stays whole-step.
+- Prove it with a demo that draws a sine wave and follows the mouse with a pencil, as its own twin
+  or as a mode of the winit twin.
+- Free drawing does not fit a cell grid, so the core's output needs a draw list beside the grid,
+  the same input a GPU renderer would take. Settle that with [TUI or GUI
+  backend](#tui-or-gui-backend).
+
+### Draw text along a path
+
+Text drawn along a straight or curved path, each character scaled on its own, is beyond a bitmap
+font, which can be neither rotated nor scaled cleanly. It is a pipeline of drawers above the
+canvas, and the canvas only blends the result.
+
+- Outline fonts: TrueType or OpenType glyphs, read by `ttf-parser` and rasterized by `ab_glyph` or
+  `fontdue`, with `rustybuzz` for shaping beyond ASCII.
+- Layout: the path flattened to segments with cumulative lengths, so each glyph's advance becomes
+  a distance along the path, a point, and a tangent angle.
+- Transform per glyph: translate to the point, rotate to the tangent, and apply the character's
+  scale, then rasterize the outline to coverage.
+- The canvas blends color by coverage, the blend in [Generalize the pixel
+  canvas](#generalize-the-pixel-canvas), which this needs first.
+- A shorter route: tiny-skia fills a path under any transform with antialiasing, so each glyph's
+  outline becomes a path filled with its transform, at the cost of an allocator and a conversion
+  from premultiplied RGBA to present. We think it builds without std, unchecked.
+- On a GPU the pipeline is the same down to rasterizing, where glyphs are usually signed distance
+  field textures that rotate and scale cleanly.
+
 ## Ideas
 
 _None._
@@ -62,84 +135,345 @@ _None._
 
 ## Closed
 
-### feat: quit on return
+### feat: workspace-gui-softbuffer
 
 #### Problem
 
-The display ends on a timer, so the user cannot choose when to leave it. A Ctrl-C during the
-display kills the process before the guard's `Drop` runs, so the alternate screen stays up.
+The project is one package holding the terminal program, and the progression needs window twins of
+it in two loop shapes, one where the toolkit owns the loop, as desktops require, and one where the
+program owns it, as bare metal does, with more twins of each kind expected. A window stack pulls in
+some 100 crates on Linux, which a single package would make every terminal build compile.
 
 #### Solution
 
-Stdin's terminal goes into raw mode through the rustix crate, and the display stays until CR or LF
-is read from stdin, or until the input ends. Raw mode turns Ctrl-C into a byte the wait ignores.
+The repo is a Cargo workspace whose root manifest is only the workspace. The terminal program
+moved unchanged into a `tui-rustix` member, and two window members show the text until Return or a
+close: `gui-winit-softbuffer`, where winit owns the loop and softbuffer presents the pixels, and
+`gui-minifb`, which owns its loop. Each window twin's renderer draws the frame with a bitmap font
+onto `pixel-canvas`, a shared pixel surface that knows nothing of what is drawn.
 
-- The raw-mode guard applies only when stdin is a terminal and restores the saved settings on drop,
-  and the binary enters it before the alternate screen.
-- The wait is a library function over a buffered reader, unit tested with byte slices.
-- The integration test pipes stdin, checks that the binary waits, then sends a newline and checks
-  the exit and the text.
-- The findings about terminal input went into [terminal-host.md](notes/terminal-host.md).
-- The workspace gained a README and the MIT and Apache-2.0 license files.
+- Each member is named for every layer of its stack that differs, and its package and binary carry
+  that name alone.
+- The version-of-record is the workspace manifest's, and every member inherits it.
+- The scale factor travels as an exact `Ratio`. The winit twin reads winit's factor over 120 and
+  its bitmap text rounds it to a whole step, and the minifb twin, which has no factor to read,
+  draws at scale 1.
+- A living `notes/architecture.md` holds the design: the layers, the pipelines, the two loop
+  shapes, the scale factor, and rendering with actors.
+- On Wayland, `gui-minifb` forgets its window at exit, avoiding minifb 0.28's drop-order warning
+  until the upstream fix in the Todo lands.
+- Validation installs each binary, and the stale `uis-x1` binary is uninstalled.
 
 #### Acceptance check
 
-`cargo test` passes with a test that runs the binary with stdin piped, finds it still running after
-a pause, writes a newline, and sees a clean exit with the text on stdout. In a real terminal, a
-Ctrl-C during the display is ignored, Return ends it, and the shell comes back with its echo and
-line editing working.
+`cargo test` at the root runs every member's tests and passes. The terminal twin's tests pass
+unchanged apart from names, the canvas's tests draw pixels and scaled squares into plain buffers,
+and each window twin's tests render its frame into a pixel buffer and find the text's pixels in
+it. The terminal twin passes the pseudo-terminal check from the last cycle again. In a desktop
+session, `gui-winit-softbuffer` and `gui-minifb` each open a window showing the text, and Return
+or closing the window exits it.
 
-Result: pass. `cargo test` passes, and the terminal half ran on a pseudo-terminal. Two Ctrl-Cs half
-a second apart left the program running, Return ended it with exit status 0, no `^C` was echoed,
-and the terminal settings read before and after were identical. A control run in the same harness
-showed a Ctrl-C killing a plain `sleep`, so the harness delivers real signals.
-
-#### Ladder
-
-- feat: quit on return (done)
+Result: pass. `cargo test` passes, 22 tests across the members. The terminal half ran
+on a pseudo-terminal: two Ctrl-Cs half a second apart left the program running, Return ended it
+with exit status 0, no `^C` was echoed, the text was shown, and the terminal settings read before
+it started and after it exited were identical. A control run showed a Ctrl-C killing a plain
+`sleep`, so the harness delivers real signals. In the user's KDE Wayland session both windows
+showed the text, sharp, and exited on Return and on a close. `gui-minifb` then printed a
+libwayland warning at exit, which the fix rung inserted at close-out removed.
 
 #### Deliberation
 
-- Raw mode through rustix: the crate's safe calls read the terminal settings, make them raw, write
-  them back, and check whether stdin is a terminal.
-  - It pulls in three crates on Linux and makes the system calls itself there, without libc.
-    Since crossterm is built on it, a later move to crossterm starts from the same base.
-  - Calling libc directly was the first plan, and it makes every call `unsafe`.
-  - The termion crate applies raw mode to the output handle, and the test pipes stdout, so
-    entering raw mode fails there.
-  - The crossterm crate pulls in 13 to 27 crates for raw mode plus output commands, and the plan
-    builds the output layer itself as the cell-grid presenter.
-- Windows later: Windows has no POSIX terminal settings, so the terminal module of rustix is Unix
-  only, and macOS works unchanged.
-  - A Windows console module comes behind a platform switch when a Windows terminal build is a
-    goal. It clears line input, echo, and processed input, and turns on virtual terminal
-    processing so the escape sequences are honored.
-  - The one-crate alternative at that point is crossterm.
-- The standard raw settings: the `make_raw` call gives the settings of `cfmakeraw`, which clear
-  more than line input, echo, and signals.
-  - Return arrives as CR, since the CR to LF translation is off.
-  - Output processing is off, so a written newline no longer returns the cursor. The program
-    writes no newline, and the cell-grid presenter will write explicit carriage returns.
-  - Ctrl-Z and `Ctrl-\` arrive as bytes like Ctrl-C, and flow control by Ctrl-S and Ctrl-Q is off.
-- CR or LF ends the display: a terminal in raw mode sends CR for Return, and a pipe sends LF.
-- Raw mode only on a terminal: a pipe has no terminal settings, and the test feeds stdin through
-  one.
-- End of input ends the display: a closed stdin can never deliver a Return, so waiting past its end
-  would hang the program.
-- Raw mode before the alternate screen: entering raw mode first leaves no moment when the
-  alternate screen is up and Ctrl-C still kills the process. The guards drop in reverse, so the
-  screen is restored before the input settings.
-- The wait in the library: it is a function over a buffered reader, so a unit test feeds it
-  bytes, Ctrl-C's included, with no terminal.
-- Stdin held open until the exit: the test keeps its end of the pipe open while it waits, since
-  closing it would end the display through end of input and hide a broken Return.
-- A buffered reader for the wait: clippy flags reading a byte at a time from an unbuffered reader,
-  and stdin's lock and a byte slice are both buffered, so the wait takes a buffered reader.
-- A pseudo-terminal for the terminal half: `script` runs the binary on one, so the Ctrl-C and
-  Return bytes pass through a real terminal driver, which the sandbox otherwise lacks.
-- README and licenses in this commit: they arrived during the cycle, and the user chose this
-  commit over a Todo entry of their own, as [Unplanned work](AGENTS.md#unplanned-work) allows.
-  - The licenses match the sibling projects' dual MIT and Apache-2.0 pair, with this project's
-    year.
+- Workspace-only root: the root manifest declares the workspace and no package, so every cargo
+  command at the root covers every member.
+  - Two binaries in one package would share the window stack's crates unless a cargo feature gated
+    them, and the gating is friction on every command.
+  - Keeping the terminal program as the root package, with the window twin as a member, moves no
+    files. But cargo commands at the root reach only the root package, and the later core crate
+    would sit lopsided beside it.
+- Members named for their stack: more twins of each kind are expected, `tui-ratatui` for one, so a
+  member's name says what differs.
+  - The opening named the window twin `gui-softbuffer`, since winit is common to nearly every Rust
+    GUI stack. With a twin that has no winit to follow, the name spells out both layers,
+    `gui-winit-softbuffer`, chosen by the user at the window twin's review.
+- Two window twins in one cycle: winit owns the loop, the shape desktop toolkits impose and the
+  one the actor model must fit on Windows and macOS, while minifb leaves the loop to the program,
+  the shape bare metal takes. The user added the second at the window twin's review, as a rung
+  rather than a Todo.
+- Bare stack names on packages and binaries: a member's package and binary are its directory's
+  name, which is simpler to type and to read, chosen by the user at the move's review.
+  - The opening planned a project prefix, `uis-x1-tui-rustix`, since `cargo install` puts every
+    binary in the shared cargo bin directory, where a bare stack name could collide with another
+    project's binary. That collision is the cost accepted.
+  - A short package with a prefixed binary, through a `[[bin]]` name, kept the short cargo commands
+    and the collision guard, and was declined for the simpler manifest.
+- Softbuffer for the window twin: winit is common to nearly every Rust GUI stack, egui and iced
+  included, so the software pixel path is what sets this twin apart.
+  - The crate is mature, its main branch is active, and its latest release is from 2025-12-13.
+  - It is the thinnest layer to the OS, and a pixel presenter over it later runs unchanged over a
+    bare-metal framebuffer, per [actor-model-1.md](notes/actor-model-1.md).
+- The stable winit line: the next line is still in beta with a changed API, so the twin starts on
+  the stable one.
+- Fonts from embedded-graphics: its mono fonts are bitmap fonts with a draw-target trait, the
+  pairing the actor notes plan for one pixel presenter over a window and a framebuffer, and it
+  adds six small crates.
+  - The font8x8 crate is lighter, one crate with one 8 by 8 font, and has no draw-target trait.
+- Whole-step scaling: a 10 by 20 bitmap font is tiny on a high-density display, so the text scales
+  by the window's scale factor rounded to a whole number, which keeps each font pixel a sharp
+  square.
+- Scale 1 for the minifb twin: minifb reports no display scale factor, and its scale option is a
+  window multiplier, so the twin draws at scale 1 and the platform enlarges it, a Wayland
+  compositor softly at a fractional factor. Chosen by the user at the minifb rung.
+  - A scale the program picks, a constant or an environment variable through `Scaled`, is the
+    bare-metal pattern, but a compositor would still enlarge it again above scale 1.
+  - minifb's own window multiplier scales in the presenter, but is fixed and sits awkwardly with
+    resizing.
+  - Fonts do not change the answer: a bitmap font needs the factor to pick its strike, and an
+    outline font needs it to pick its size, so both need what minifb does not report.
+- The scale as a ratio: every platform's factor is a ratio, Wayland's over 120 and DPI over 96, so
+  a reduced `num/den` carries it exactly and without floating point, where an `f64` rounds some
+  and a fixed denominator cannot hold DPI-derived ones. Chosen by the user after the minifb twin.
+  - It is the scale factor's type, not geometry's. Rotation and curves are real-valued, so a
+    drawer that needs them converts the ratio once, at its transform.
+  - Its own small type rather than `num-rational`, a dependency for three methods.
+- The module that draws the frame named `renderer`: a frame is the picture and a renderer makes
+  it, so the module is named for its job. Chosen by the user during the ratio rung, folded into
+  it rather than run as a rung of its own.
+  - A `Frame` type returned by the renderer was weighed. The renderer draws into storage the
+    presenter owns, so an owned frame would add an allocation and a copy per frame, and it waits
+    for the actors, where a frame is a message from renderer to presenter.
+- Widgets report, one renderer draws: under actors a widget sends its new look as data and one
+  renderer draws the whole frame on the host's frame clock, rather than each widget drawing into
+  the framebuffer on a change or on request. Recorded in the architecture note, the user's
+  question during the ratio rung.
+- The minifb window forgotten on Wayland only: its Wayland warning at exit was unacceptable for a
+  real app, so the window is forgotten when minifb chose Wayland, and dropped as usual on X11. The
+  real fix, a fork of minifb offered upstream, is its own later cycle, on a branch. Chosen by the
+  user at close-out.
+  - Never dropping it, through `ManuallyDrop`, was the first stopgap, but it switched off minifb's
+    cleanup on every backend to hide one bad step on one, and the user rejected it as a long-term
+    shape.
+  - The backend comes from the window's own handle, since minifb tries Wayland first and falls
+    back to X11, so the environment would only guess.
+  - Building minifb with only its `x11` feature avoids the Wayland backend through XWayland, but
+    gives up native Wayland to silence a warning.
+  - A second twin on the forked minifb was weighed, but a patched dependency is the same stack,
+    and a bookmark serves the side-by-side trial.
+- Return or window close exits: the window twin mirrors the terminal twin's Return, and a window
+  can also be closed from its title bar, so both end it. Escape stays unbound, as in the terminal
+  twin.
+- The text copied, not shared: the terminal twin keeps its own copy of the text, since a shared
+  crate for one constant is premature and the core crate arrives with the cell grid.
+- The renderer shared at its second user: the minifb twin would otherwise copy the canvas, the
+  frame, and their tests, so the renderer moves into a library member both window twins use, the
+  start of the pixel presenter the actor notes plan. Chosen by the user over a copy.
+- The name `pixel-renderer`: a renderer turns a frame into pixels and a presenter puts pixels on
+  the screen, softbuffer or minifb here, and the name says which. Chosen by the user, and later
+  replaced by `pixel-canvas`, below.
+  - A bare `renderer` was weighed, but ANSI and GPU renderers are expected beside it, and the
+    bare name would not say which one it is.
+  - `pixel-presenter`, the actor notes' word, would name the layer softbuffer and minifb fill.
+- The frame split from the canvas: the shared crate was a pixel surface with this program's frame
+  on top, the text, the font, and a canvas scale that existed for the font. The surface stays
+  shared as `pixel-canvas`, and the frame moves into each twin. Raised by the user after the
+  renderer's move landed.
+  - Drawers, fonts and shapes alike, draw into the canvas, and the canvas knows none of them, so
+    it depends on `embedded-graphics-core` alone, the trait, the colors, and the geometry.
+  - Scaling is a `Scaled` adapter over any draw target, since blocky scaling is a pixel operation
+    rather than a font's.
+  - Once the canvas is general the frame is a few lines, so each twin keeps its own copy, as the
+    terminal twin keeps its text.
+  - The name follows the contents: a surface drawn on, which renders nothing itself.
+- The moves as their own rungs: the terminal program, and later the renderer, move unchanged in
+  rungs of their own, so each move is reviewed as a move before new code lands on it.
+- A pixel-buffer test for the window twin: the sandbox has no display, so the test renders into a
+  buffer and checks pixels, and only the window itself is checked by hand.
+- No restart between cycles: the user opened this cycle in the session that ran the last one.
+- The last cycle lands first: main advances to the quit-on-Return commit and its bookmark is
+  deleted before this opening's push, so that commit stays out of this ladder.
+
+#### Ladder
+
+- [feat: workspace-gui-softbuffer opening][1] (done)
+- [refactor: move the tui into the workspace][2] (done)
+- [feat: add the gui-winit-softbuffer twin][3] (done)
+- [refactor: share the pixel renderer][4] (done)
+- [refactor: split the frame from the canvas][7] (done)
+- [docs: record the pixel architecture][8] (done)
+- [feat: add the gui-minifb twin][5] (done)
+- [refactor: pass the scale as a ratio][9] (done)
+- [fix: exit gui-minifb without the Wayland warning][10] (done)
+- [feat: workspace-gui-softbuffer closing][6] (done)
+
+##### feat: workspace-gui-softbuffer opening
+
+The cycle's setup commit: create and publish the bookmark, empty `## Closed`, move the Todo entry
+into this block, and bump the version-of-record.
+
+The plan settled at the opening: a workspace-only root, members named for their stack with
+prefixed packages and binaries, softbuffer on the stable winit line, embedded-graphics fonts scaled
+in whole steps, and exits on Return or window close.
+
+##### refactor: move the tui into the workspace
+
+The terminal program is the root package, so a second program cannot sit beside it without sharing
+its dependencies. The root becomes a workspace-only manifest, and the program moves unchanged into
+`tui-rustix/` under that name.
+
+- The root declares the workspace and the shared `version` and `edition`, and the member inherits
+  both, so the version-of-record has one home for every member.
+- The package, and with it the binary and the library crate, is `tui-rustix`, the bare stack name
+  the review chose over the planned prefix, and the sources change only where they name the crate
+  or the binary.
+- The member keeps its own clippy lints for now. Hoisting them to the workspace waits for a second
+  member to share them.
+- Validation installs from `tui-rustix/`, since `cargo install --path .` needs a package at the
+  root, and the stale `uis-x1` binary is uninstalled.
+
+##### feat: add the gui-winit-softbuffer twin
+
+The progression has no window program. A `gui-winit-softbuffer` member opens a window with winit,
+draws the text with a bitmap font into a softbuffer pixel buffer, and exits on Return or when the
+window closes.
+
+- The drawing is the library's and the window is the binary's: the library draws the frame into
+  any slice of pixels, so the tests and a later framebuffer presenter use it with no window.
+- The canvas is an embedded-graphics draw target that turns each font pixel into a square of
+  whole screen pixels, and embedded-graphics clips at the canvas's size in font pixels.
+- The text starts at the top left corner, where the terminal twin's cursor starts, which is also
+  where a cell grid's first cell will sit.
+- A handler cannot return an error in winit's application trait, so the first error is kept and
+  ends the event loop, and `main` returns it.
+- The tests check that the frame holds only the text and background colors with the text inside
+  its box, that scale 2 is scale 1 with each pixel doubled, and that a clipped frame is the top
+  left corner of the unclipped one.
+- The terminal member still builds on its own four crates, and the window member brings some 105.
+- The member was `gui-softbuffer` until its review renamed it for both layers, the next rungs'
+  twin having no winit.
+
+##### refactor: share the pixel renderer
+
+The minifb twin needs the same canvas and frame as the winit twin. They move unchanged, tests
+included, from the winit twin's library into a library member both window twins depend on.
+
+- The `pixel-renderer` member holds the canvas, the frame, the scale rule, and their tests, and the
+  embedded-graphics dependency moves with them, so the winit twin is a binary alone over winit,
+  softbuffer, and the renderer.
+- The module docs change only where they named the old home.
+- The canvas is the part a later software 3D renderer would share, since it is a buffer any
+  rasterizer can draw into, while the text drawing stays 2D. A GPU renderer would be a sibling
+  consuming the core's output, not a layer over this one.
+
+##### refactor: split the frame from the canvas
+
+The shared renderer mixes a pixel surface with this program's frame, the text, its font, and a
+canvas scale that exists for the font. The surface stays shared as `pixel-canvas`, and the frame
+moves into the winit twin.
+
+- The canvas draws at the buffer's own resolution, clips at every edge and at a short slice, and
+  clears in one pass, and it exports the `0x00RRGGBB` conversion presenters and tests share.
+- `Scaled` draws each pixel as a filled square on the target it wraps, and reports its size in
+  whole squares for drawers that lay out by it.
+- The winit twin's frame module holds the text, the colors, the scale rule, and the frame's
+  tests, which pass as they did against the old renderer, so the frame draws the same pixels.
+- The canvas's own tests cover placement, clipping on each side, a short slice, the scaled
+  square, and the scaled size.
+- This rung takes the first two bullets of the canvas generalization Todo, full resolution and
+  the scaled adapter, and leaves the retained layer, blending, and the demo there.
+
+##### docs: record the pixel architecture
+
+The layering this cycle settled lives only in the cycle record and the session. A living
+`notes/architecture.md` names the layers, core, drawer, canvas, presenter, and renderer, sketches
+the CPU and GPU pipelines, sets out the two loop shapes, and records the workspace conventions,
+linked from `notes/README.md` and reconciled with the actor notes.
+
+- Each layer is defined by what it does not know, so a layer can be swapped without the others
+  noticing, and the host is named as the layer that owns or joins the loop.
+- The actor notes' "presenter" is this file's renderer, and the note maps the terms rather than
+  editing the dated discussion.
+- The planned minifb twin appears as planned, and its rung updates the note when it lands.
+
+##### feat: add the gui-minifb twin
+
+The progression has no window program that owns its loop. A `gui-minifb` member opens a window
+with minifb and runs its own loop, drawing its frame onto the shared canvas and presenting it,
+until Return or a close.
+
+- Each pass polls the window, redraws only when the size has changed, presents the buffer, and
+  checks Return, the bare-metal loop in miniature, paced at 60 passes a second.
+- The buffer is the host's and outlives each pass, a first taste of the retained layer, since
+  minifb presents whatever the buffer holds.
+- The frame is a copy of the winit twin's without its scale rule, drawn at scale 1, and its tests
+  come with it.
+- Return on the main keys or the keypad exits, matching winit's Enter, which covers both.
+- The twin brings some 42 crates against the winit twin's 107, and the architecture note gains
+  where the scale factor comes from and why this twin has none.
+
+##### refactor: pass the scale as a ratio
+
+The winit twin rounds winit's floating-point scale factor to a whole step before drawing, so the
+exact factor is lost at the host. A `Ratio` in `pixel-canvas` carries the factor exactly from host
+to drawer, and the bitmap text rounds it only where it draws.
+
+- `Ratio` is reduced on construction, so 150/120 and 5/4 compare equal, and its denominator is
+  nonzero by type. It offers the whole number it equals, if any, and the nearest whole step.
+- The rounding compares the remainder with what is left of the denominator instead of doubling
+  it, so it cannot overflow at any value, which the tests check at the extremes.
+- The winit twin reads winit's factor over 120, Wayland's unit, and a factor that is not a
+  positive number becomes 0, which draws as 1. The minifb twin passes 1.
+- Both frames take the ratio and round it where the bitmap text draws, and a new test in each
+  checks that 5/4 draws as 1 and 3/2 as 2.
+- The winit twin's conversion carries one `unwrap_or`, justified in place, since its denominator
+  is the constant 120.
+- The frames' docs say the rounding is this frame's choice, for sharpness and simplicity, since a
+  resampler or an outline font could use a fraction exactly.
+- The architecture note defines a frame, adds a frame column to the pipelines, and says whole
+  steps are a choice rather than a limit of bitmap fonts.
+- Each twin's `frame` module is now `renderer`, since it draws the frame rather than being one,
+  and its text is marked as the core's stand-in.
+- The architecture note gains rendering with actors: widgets report changes as data, one UI actor
+  marks what is dirty, the host's frame clock asks for a frame, and one renderer draws it.
+
+##### fix: exit gui-minifb without the Wayland warning
+
+On Wayland, `gui-minifb` prints a libwayland warning listing some twenty objects as it exits,
+since minifb 0.28 destroys its event queue before the objects on it. On Wayland the window is
+forgotten, so process exit closes the connection and the compositor frees everything without the
+warning, and on X11 it drops as usual.
+
+- The warning comes from `wl_event_queue_destroy`, which minifb's event queue field calls as it
+  drops, before the buffer pool, cursor, and surfaces declared after it.
+- The loop moved into a function, so `main` decides the window's fate after it however it ended,
+  an error included.
+- The window's raw handle says which backend minifb chose, `raw-window-handle` being the one new
+  dependency, already in the tree through minifb.
+- It is a workaround for one window per process. An app opening and closing many windows on
+  Wayland would leak each one, which the upstream fix removes.
+
+##### feat: workspace-gui-softbuffer closing
+
+Closing out the cycle.
+
+- Acceptance: the pseudo-terminal harness first read the terminal settings after starting the
+  program, by which time raw mode was on, and reported a false mismatch. Opening the pseudo-terminal
+  first and reading the slave's settings before the program starts and after it exits gave the
+  true comparison.
+- Acceptance: the window check surfaced a libwayland warning from `gui-minifb` at exit, so a
+  fix rung was inserted before this closing, with the closing's edits set aside as a patch and
+  restored after it.
+- The pseudo-terminal method, and the catch that the settings are read before the program
+  starts, went into [terminal-host.md](notes/terminal-host.md).
+- Close-out shape: trapezoid, chosen by the user.
 
 # References
+
+[1]: #feat-workspace-gui-softbuffer-opening
+[2]: #refactor-move-the-tui-into-the-workspace
+[3]: #feat-add-the-gui-winit-softbuffer-twin
+[4]: #refactor-share-the-pixel-renderer
+[5]: #feat-add-the-gui-minifb-twin
+[6]: #feat-workspace-gui-softbuffer-closing
+[7]: #refactor-split-the-frame-from-the-canvas
+[8]: #docs-record-the-pixel-architecture
+[9]: #refactor-pass-the-scale-as-a-ratio
+[10]: #fix-exit-gui-minifb-without-the-wayland-warning

@@ -1,7 +1,8 @@
 # Terminal host
 
 What the terminal host has to know about the terminal's input and output modes, found in the cycle
-`feat: quit on return`, which added raw mode, and in the questions around it.
+`feat: quit on return`, which added raw mode, and in the questions around it. The check on a
+pseudo-terminal was refined in the cycle `feat: workspace-gui-softbuffer`.
 
 ## Normal mode keeps keys for itself
 
@@ -68,3 +69,22 @@ Windows host needs its own console module behind a platform switch.
   are not honored.
 - The crossterm crate does both, and is the one-crate alternative when a Windows terminal build
   becomes a goal.
+
+## Checking on a pseudo-terminal
+
+The sandbox and CI have no terminal, so the terminal twin's raw-mode behavior is checked on a
+pseudo-terminal, which puts a real terminal driver between the test and the program.
+
+- Open the pseudo-terminal first, then start the program with its slave side as stdin, stdout,
+  and stderr, in a new session with the slave as its controlling terminal, so a Ctrl-C byte
+  becomes SIGINT for a program that has not turned raw mode on.
+- Read the terminal settings from the slave before the program starts and after it exits.
+  Reading them after starting the program races it, since raw mode is on within milliseconds, and
+  reports a mismatch that is not there, as the first harness did in the cycle
+  `feat: workspace-gui-softbuffer`.
+- Send two Ctrl-Cs half a second apart, check the program is still running, send a CR, and
+  expect exit status 0, the text in the output, no `^C` echoed, and identical settings.
+- Run a plain `sleep` through the same harness as a control: a Ctrl-C must kill it with SIGINT,
+  which shows the harness delivers real signals.
+- The cycle `feat: quit on return` ran the program under `script` instead, which gives the same
+  driver with less control over when the settings are read.

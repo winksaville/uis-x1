@@ -1,10 +1,18 @@
 # Experiment with UIs
 
-A Rust program that is a TUI based on an alternate screen.
+A Cargo workspace of Rust programs toward an actor-model UI, each program named for its stack, and
+the libraries they share:
 
-After installing, execute it with `uis-x1` from a terminal.
-It displays "Hello, World" until Return/Enter is pressed, then
-exits back to the terminal's original screen.
+- `tui-rustix`: a TUI on the alternate screen over rustix, installed as `tui-rustix`. It
+  displays "Hello, World" until Return/Enter is pressed, then exits back to the terminal's
+  original screen.
+- `gui-winit-softbuffer`: a window drawn with winit and softbuffer, installed as
+  `gui-winit-softbuffer`. It displays "Hello, World" until Return/Enter is pressed or the window
+  is closed.
+- `gui-minifb`: the same window with minifb, whose loop is the program's own, installed as
+  `gui-minifb`. It displays "Hello, World" until Return/Enter is pressed or the window is closed.
+- `pixel-canvas`: the library the window programs share, a pixel surface that fonts, shapes, and
+  other drawers write into through the embedded-graphics draw-target trait.
 
 ## Build
 
@@ -21,13 +29,17 @@ cargo test
 ## Run
 
 ```
-cargo run
+cargo run -p tui-rustix
+cargo run -p gui-winit-softbuffer
+cargo run -p gui-minifb
 ```
 
 ## Install
 
 ```
-cargo install --path . --locked
+cargo install --path tui-rustix --locked
+cargo install --path gui-winit-softbuffer --locked
+cargo install --path gui-minifb --locked
 ```
 
 ## License
