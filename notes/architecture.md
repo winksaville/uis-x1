@@ -86,8 +86,12 @@ drain its messages, update its state, emit its output, and return.
   proxy.
 - Program-owned: the host runs its own loop, polling input, stepping the core, drawing, and
   presenting, as `gui-minifb` does, and as the terminal twin's blocking read does in its
-  simplest form. It is the bare-metal shape, where the loop waits for an interrupt
-  and the interrupt handlers push into the rings.
+  simplest form. It is the bare-metal shape, where the loop waits for an interrupt and the
+  interrupt handlers push into the rings.
+- `gui-minifb` forgets its window on Wayland. minifb 0.28's Wayland backend destroys its event
+  queue before the objects on it, and libwayland warns, so process exit releases the window
+  instead, while on X11 it drops as usual, until the fix in [Fix minifb's Wayland drop order
+  upstream](../TODO.md#fix-minifbs-wayland-drop-order-upstream) lands.
 
 ## The scale factor
 

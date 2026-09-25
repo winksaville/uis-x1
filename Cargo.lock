@@ -584,16 +584,17 @@ dependencies = [
 
 [[package]]
 name = "gui-minifb"
-version = "0.1.2-7"
+version = "0.1.2-8"
 dependencies = [
  "embedded-graphics",
  "minifb",
  "pixel-canvas",
+ "raw-window-handle",
 ]
 
 [[package]]
 name = "gui-winit-softbuffer"
-version = "0.1.2-7"
+version = "0.1.2-8"
 dependencies = [
  "embedded-graphics",
  "pixel-canvas",
@@ -1240,7 +1241,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pixel-canvas"
-version = "0.1.2-7"
+version = "0.1.2-8"
 dependencies = [
  "embedded-graphics-core",
 ]
@@ -1766,7 +1767,7 @@ checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 
 [[package]]
 name = "tui-rustix"
-version = "0.1.2-7"
+version = "0.1.2-8"
 dependencies = [
  "rustix 1.1.5",
 ]

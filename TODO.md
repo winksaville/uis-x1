@@ -113,6 +113,19 @@ or closing the window exits it.
   renderer draws the whole frame on the host's frame clock, rather than each widget drawing into
   the framebuffer on a change or on request. Recorded in the architecture note, the user's
   question during the ratio rung.
+- The minifb window forgotten on Wayland only: its Wayland warning at exit was unacceptable for a
+  real app, so the window is forgotten when minifb chose Wayland, and dropped as usual on X11. The
+  real fix, a fork of minifb offered upstream, is its own later cycle, on a branch. Chosen by the
+  user at close-out.
+  - Never dropping it, through `ManuallyDrop`, was the first stopgap, but it switched off minifb's
+    cleanup on every backend to hide one bad step on one, and the user rejected it as a long-term
+    shape.
+  - The backend comes from the window's own handle, since minifb tries Wayland first and falls
+    back to X11, so the environment would only guess.
+  - Building minifb with only its `x11` feature avoids the Wayland backend through XWayland, but
+    gives up native Wayland to silence a warning.
+  - A second twin on the forked minifb was weighed, but a patched dependency is the same stack,
+    and a bookmark serves the side-by-side trial.
 - Return or window close exits: the window twin mirrors the terminal twin's Return, and a window
   can also be closed from its title bar, so both end it. Escape stays unbound, as in the terminal
   twin.
@@ -156,6 +169,7 @@ or closing the window exits it.
 - [docs: record the pixel architecture][8] (done)
 - [feat: add the gui-minifb twin][5] (done)
 - [refactor: pass the scale as a ratio][9] (done)
+- [fix: exit gui-minifb without the Wayland warning][10] (done)
 - [feat: workspace-gui-softbuffer closing][6]
 
 ##### feat: workspace-gui-softbuffer opening
@@ -288,6 +302,22 @@ to drawer, and the bitmap text rounds it only where it draws.
 - The architecture note gains rendering with actors: widgets report changes as data, one UI actor
   marks what is dirty, the host's frame clock asks for a frame, and one renderer draws it.
 
+##### fix: exit gui-minifb without the Wayland warning
+
+On Wayland, `gui-minifb` prints a libwayland warning listing some twenty objects as it exits,
+since minifb 0.28 destroys its event queue before the objects on it. On Wayland the window is
+forgotten, so process exit closes the connection and the compositor frees everything without the
+warning, and on X11 it drops as usual.
+
+- The warning comes from `wl_event_queue_destroy`, which minifb's event queue field calls as it
+  drops, before the buffer pool, cursor, and surfaces declared after it.
+- The loop moved into a function, so `main` decides the window's fate after it however it ended,
+  an error included.
+- The window's raw handle says which backend minifb chose, `raw-window-handle` being the one new
+  dependency, already in the tree through minifb.
+- It is a workaround for one window per process. An app opening and closing many windows on
+  Wayland would leak each one, which the upstream fix removes.
+
 ##### feat: workspace-gui-softbuffer closing
 
 Closing out the cycle.
@@ -326,6 +356,21 @@ workspace-gui-softbuffer cycle, since an agent-file change is its own cycle.
 The set's [.vc-config.md](agent-data/jj.md#vc-configmd) section names one file form, and vc-x1
 reads two, a plain `.vc-config.toml` and a `.vc-config.md` whose `toml` fences hold the config.
 Propose that the section name both, so no adopter needs a custom.md entry for it.
+
+### Fix minifb's Wayland drop order upstream
+
+minifb 0.28's Wayland backend declares its event queue before the objects on it, so its drop
+destroys the queue first and libwayland warns, and `gui-minifb` avoids it by forgetting its
+window on Wayland.
+
+- Fork minifb from its `v0.28.0` tag with one commit: the event queue declared last, or the
+  objects destroyed first in a `Drop`, so the fork is the release plus one fix.
+- Point `gui-minifb` at the fork by git, pinned to that commit, remove the Wayland forget, and
+  check by hand that the exit prints nothing, on the cycle's bookmark before it lands.
+- Offer the commit upstream as a pull request, the user's call since it publishes.
+- Park the return to crates.io in `## Waiting`, conditioned on a minifb release carrying the fix.
+- A headless compositor, `weston --backend=headless`, could make the exit check automatic, if
+  Wayland regressions become a pattern.
 
 ### Record the actor access rule
 
@@ -407,3 +452,4 @@ _None._
 [7]: #refactor-split-the-frame-from-the-canvas
 [8]: #docs-record-the-pixel-architecture
 [9]: #refactor-pass-the-scale-as-a-ratio
+[10]: #fix-exit-gui-minifb-without-the-wayland-warning
